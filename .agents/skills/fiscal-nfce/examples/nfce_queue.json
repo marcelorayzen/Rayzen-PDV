@@ -1,0 +1,27 @@
+{
+  "documentos": [
+    {
+      "id": "nfce_0001",
+      "referencia": { "tipo": "COMANDA", "id": "cmd_500" },
+      "status": "DRAFT",
+      "tentativas": 0,
+      "ultimoErro": null
+    },
+    { "id": "nfce_0002", "status": "AUTHORIZED", "tentativas": 1, "ultimoErro": null },
+    {
+      "id": "nfce_0003",
+      "status": "CONTINGENCY",
+      "tentativas": 1,
+      "tpEmis": 9,
+      "dhCont": "2026-03-12T18:06:00.000Z",
+      "xJust": "Timeout no canal de autorizacao.",
+      "ultimoErro": { "codigo": "NS_TIMEOUT", "mensagem": "Sem resposta do provider NS." }
+    },
+    {
+      "id": "nfce_0004",
+      "status": "REJECTED",
+      "tentativas": 1,
+      "ultimoErro": { "codigo": "123", "mensagem": "Exemplo" }
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "product": "PDV Rayzen",
+  "version": "0.1.0",
+  "channel": "local",
+  "notes": [
+    "Instalador inicial",
+    "Logs exportaveis",
+    "Operacao offline validada"
+  ]
+}

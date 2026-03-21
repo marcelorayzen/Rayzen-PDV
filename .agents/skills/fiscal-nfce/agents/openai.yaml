@@ -1,0 +1,6 @@
+interface:
+  display_name: "PDV Rayzen - Fiscal NFC-e"
+  short_description: "Fila fiscal, contingencia e rejeicoes"
+  default_prompt: "Use $fiscal-nfce para revisar fila fiscal, contingencia e retentativas da NFC-e."
+policy:
+  allow_implicit_invocation: false

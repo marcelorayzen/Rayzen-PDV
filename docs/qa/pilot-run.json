@@ -1,0 +1,42 @@
+{
+  "version": "0.1.0",
+  "stage": "pilot",
+  "generatedAt": "2026-03-12T15:19:04.414Z",
+  "scope": [
+    "Comanda",
+    "Impressao",
+    "Caixa",
+    "Offline",
+    "First-run e instalacao",
+    "Renderer teclado-first",
+    "Electron IPC"
+  ],
+  "commands": [
+    "cmd /c pnpm typecheck",
+    "cmd /c pnpm build",
+    "cmd /c pnpm test:unit",
+    "cmd /c pnpm test:integration",
+    "cmd /c pnpm test:smoke:offline",
+    "cmd /c pnpm test:smoke:install",
+    "cmd /c pnpm test:validate:printing",
+    "cmd /c pnpm test:validate:cash"
+  ],
+  "status": "PASS",
+  "evidences": [
+    "[packages/db] 8 runtime checks passed.",
+    "[electron] 12 runtime checks passed.",
+    "[apps/pdv] 13 runtime checks passed.",
+    "[qa/smoke-offline] 5 runtime checks passed.",
+    "[qa/install-smoke] 1 runtime check passed.",
+    "[qa/printing] 3 runtime checks passed.",
+    "[qa/cash] 4 runtime checks passed.",
+    "manual rollout artifact validated at electron\\out\\releases\\v0.1.0\\windows\\manual-rollout-manifest.json"
+  ],
+  "risks": [
+    "Validar em impressoras reais homologadas antes de promover para producao ampla.",
+    "O instalador Squirrel ainda nao completou neste host; o rollout validado para piloto continua sendo ZIP com manifesto.",
+    "Fiscal e impressao ainda dependem de homologacao de campo por hardware e ambiente externo.",
+    "Node 22 continua sendo a versao alvo; a evidencia atual foi rodada em Node 24."
+  ],
+  "recommendation": "Apto para piloto controlado, com rollout manual por ZIP validado, monitoramento assistido e homologacao de campo de impressao/fiscal."
+}

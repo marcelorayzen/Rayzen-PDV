@@ -1,0 +1,14 @@
+openapi: 3.0.3
+info:
+  title: "PDV Rayzen Local API (template)"
+  version: "0.1.0"
+paths:
+  /comandas:
+    post:
+      summary: "Abrir comanda"
+  /comandas/{comandaId}/itens:
+    post:
+      summary: "Adicionar item na comanda"
+  /comandas/{comandaId}/enviar-producao:
+    post:
+      summary: "Enviar itens para producao"

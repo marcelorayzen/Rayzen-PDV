@@ -1,0 +1,25 @@
+{
+  "version": "0.1.0",
+  "stage": "homolog",
+  "scope": [
+    "Comanda",
+    "Impressao",
+    "Caixa",
+    "Offline"
+  ],
+  "commands": [
+    "cmd /c pnpm test:unit",
+    "cmd /c pnpm test:integration",
+    "cmd /c pnpm test:smoke:offline"
+  ],
+  "status": "PASS",
+  "evidences": [
+    "[packages/db] 7 runtime checks passed.",
+    "[electron] 10 runtime checks passed.",
+    "[apps/pdv] 11 runtime checks passed."
+  ],
+  "risks": [
+    "Validar em piloto com impressoras reais e matriz de drivers."
+  ],
+  "recommendation": "Apto para homolog com smoke offline reproduzivel."
+}

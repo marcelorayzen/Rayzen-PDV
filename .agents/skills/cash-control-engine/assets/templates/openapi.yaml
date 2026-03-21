@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: "PDV Rayzen Cash API (template)"
+  version: "0.1.0"
+paths:
+  /caixa/abrir:
+    post:
+      summary: "Abrir caixa"
+  /caixa/fechar:
+    post:
+      summary: "Fechar caixa"

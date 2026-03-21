@@ -1,0 +1,4 @@
+[
+  { "jobId": "job_1", "setor": "COZINHA", "status": "QUEUED", "attempt": 0 },
+  { "jobId": "job_2", "setor": "BAR", "status": "WAITING_PRINTER", "attempt": 2 }
+]

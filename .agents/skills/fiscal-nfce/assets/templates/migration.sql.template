@@ -1,0 +1,3 @@
+BEGIN;
+-- CREATE TABLE fiscal_documents (...)
+COMMIT;

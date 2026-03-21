@@ -1,0 +1,6 @@
+interface:
+  display_name: "PDV Rayzen - QA Regression PDV"
+  short_description: "Regressao offline-first e release report"
+  default_prompt: "Use $qa-regression-pdv para montar regressao offline-first e gerar o release report."
+policy:
+  allow_implicit_invocation: true

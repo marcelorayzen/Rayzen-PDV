@@ -1,0 +1,26 @@
+{
+  "sessionId": "cx_0001",
+  "status": "FECHAMENTO",
+  "abertura": {
+    "fundoInicial": 150,
+    "motivo": "troco inicial do turno"
+  },
+  "pagamentos": [
+    { "metodo": "DINHEIRO", "valor": 50, "status": "CONFIRMADO" },
+    { "metodo": "PIX", "valor": 30, "status": "CONFIRMADO" }
+  ],
+  "movimentos": [
+    { "tipo": "SUPRIMENTO", "metodo": "DINHEIRO", "valor": 20, "motivo": "reforco de troco" },
+    { "tipo": "SANGRIA", "metodo": "DINHEIRO", "valor": 10, "motivo": "retirada do excesso" }
+  ],
+  "conferencia": {
+    "DINHEIRO": 210,
+    "PIX": 30,
+    "CARTAO_CREDITO": 0,
+    "CARTAO_DEBITO": 0,
+    "OUTRO": 0
+  },
+  "totais": {
+    "esperado": 80
+  }
+}

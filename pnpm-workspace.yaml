@@ -1,0 +1,7 @@
+packages:
+  - "apps/*"
+  - "packages/*"
+  - "electron"
+onlyBuiltDependencies:
+  - "electron"
+  - "electron-winstaller"

@@ -1,0 +1,3 @@
+BEGIN;
+-- SQL AQUI, apenas se houver cache local ou armazenamento auxiliar
+COMMIT;

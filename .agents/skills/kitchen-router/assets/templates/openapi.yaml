@@ -1,0 +1,8 @@
+openapi: 3.0.3
+info:
+  title: "PDV Rayzen Printing API (template)"
+  version: "0.1.0"
+paths:
+  /print/jobs:
+    post:
+      summary: "Criar job de impressao"

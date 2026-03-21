@@ -1,0 +1,10 @@
+-- name: YYYYMMDDHHMM__curta_descricao
+-- up:
+BEGIN;
+-- SQL AQUI
+COMMIT;
+
+-- down:
+BEGIN;
+-- ROLLBACK SQL AQUI
+COMMIT;

@@ -1,0 +1,19 @@
+{
+  "productName": "Rayzen PDV",
+  "version": "0.1.0",
+  "generatedAt": "2026-03-12T18:13:27.022Z",
+  "sourceOutputDir": "out/make",
+  "releaseRoot": "out/releases/v0.1.0/windows",
+  "rolloutMode": "manual",
+  "autoUpdate": false,
+  "artifacts": [
+    {
+      "kind": "WINDOWS_ZIP",
+      "sourceRelativePath": "zip/win32/x64/Rayzen PDV-win32-x64-0.1.0.zip",
+      "outputFileName": "rayzen-pdv-v0.1.0-zip-win32-x64-rayzen-pdv-win32-x64-0-1-0.zip",
+      "relativePath": "rayzen-pdv-v0.1.0-zip-win32-x64-rayzen-pdv-win32-x64-0-1-0.zip",
+      "sizeBytes": 142878298,
+      "sha256": "3692c70b054226e93a6c696bcdb16257c55c9bc0c3505b9de6732330f18f0db1"
+    }
+  ]
+}

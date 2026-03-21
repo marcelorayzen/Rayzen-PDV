@@ -1,0 +1,10 @@
+node_modules/
+dist/
+coverage/
+.pnpm-store/
+*.tsbuildinfo
+electron/builders/renderer/
+electron/builders/app-package/
+electron/out/
+delivery/**/*.zip
+delivery/**/docs-pdf/

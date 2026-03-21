@@ -1,0 +1,6 @@
+interface:
+  display_name: "PDV Rayzen - Cash Control Engine"
+  short_description: "Abertura, fechamento e auditoria de caixa"
+  default_prompt: "Use $cash-control-engine para revisar regras de abertura, fechamento e divergencia de caixa."
+policy:
+  allow_implicit_invocation: false

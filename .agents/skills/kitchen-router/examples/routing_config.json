@@ -1,0 +1,6 @@
+{
+  "setores": [
+    { "id": "COZINHA", "impressoras": ["IMP_COZINHA_01"] },
+    { "id": "BAR", "impressoras": ["IMP_BAR_01"] }
+  ]
+}

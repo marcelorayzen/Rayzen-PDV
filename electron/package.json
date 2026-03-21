@@ -1,0 +1,38 @@
+{
+  "name": "@rayzen/electron",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PDV desktop offline-first para bares e restaurantes.",
+  "author": "Rayzen PDV",
+  "productName": "Rayzen PDV",
+  "type": "module",
+  "config": {
+    "forge": "./forge.config.cjs"
+  },
+  "main": "dist/runtime.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "builders"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsc -p tsconfig.json --watch --preserveWatchOutput",
+    "test": "tsc -p tsconfig.json && node test/run-electron-main-tests.mjs",
+    "verify:shape": "node ../scripts/verify-electron-shape.mjs",
+    "stage:renderer": "node builders/stage-renderer.mjs",
+    "stage:app": "node builders/stage-forge-app.mjs",
+    "package:win": "pnpm run stage:app && pnpm exec electron-forge package builders/app-package --platform win32",
+    "make:win": "pnpm run stage:app && pnpm exec electron-forge make builders/app-package --platform win32 --targets @electron-forge/maker-zip",
+    "make:installer:win": "pnpm run stage:app && pnpm exec electron-forge make builders/app-package --platform win32 --targets @electron-forge/maker-squirrel",
+    "artifacts:manifest": "node builders/collect-release-artifacts.mjs"
+  },
+  "dependencies": {
+    "@rayzen/db": "workspace:*",
+    "@rayzen/pdv": "workspace:*"
+  },
+  "devDependencies": {
+    "electron": "^41.0.0"
+  }
+}

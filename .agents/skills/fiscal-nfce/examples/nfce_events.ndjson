@@ -1,0 +1,2 @@
+{"eventId":"fx_0001","entity":"FISCAL","entityId":"nfce_0001","action":"EMITIDA_CONTINGENCIA","at":"2026-03-10T22:01:00-03:00","payload":{"motivo":"sem_conexao"}}
+{"eventId":"fx_0002","entity":"FISCAL","entityId":"nfce_0001","action":"TRANSMITIDA_POSTERIOR","at":"2026-03-11T08:10:00-03:00","payload":{"tentativa":1}}

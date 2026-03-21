@@ -1,0 +1,11 @@
+openapi: 3.0.3
+info:
+  title: "PDV Rayzen Fiscal API (template)"
+  version: "0.1.0"
+paths:
+  /fiscal/nfce/emitir:
+    post:
+      summary: "Emitir NFC-e"
+  /fiscal/nfce/retentar:
+    post:
+      summary: "Retentar envio pendente"

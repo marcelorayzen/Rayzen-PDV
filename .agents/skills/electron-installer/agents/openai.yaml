@@ -1,0 +1,6 @@
+interface:
+  display_name: "PDV Rayzen - Electron Installer"
+  short_description: "Instalador, build e suporte de campo"
+  default_prompt: "Use $electron-installer para revisar packaging, instalador e suporte de campo do PDV Rayzen."
+policy:
+  allow_implicit_invocation: false

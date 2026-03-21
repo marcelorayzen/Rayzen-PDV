@@ -1,0 +1,10 @@
+openapi: 3.0.3
+info:
+  title: Rayzen PDV Local HTTP API
+  version: 0.1.0
+  description: |
+    O baseline atual do Rayzen PDV nao expoe API HTTP local.
+    Toda comunicacao interna do app desktop ocorre por IPC no Electron.
+servers: []
+tags: []
+paths: {}

@@ -1,0 +1,16 @@
+{
+  "states": [
+    "ABERTA",
+    "EM_PRODUCAO",
+    "EM_PAGAMENTO",
+    "ENCERRADA",
+    "CANCELADA"
+  ],
+  "transitions": {
+    "ABERTA": ["EM_PRODUCAO", "CANCELADA"],
+    "EM_PRODUCAO": ["EM_PAGAMENTO", "CANCELADA"],
+    "EM_PAGAMENTO": ["ENCERRADA", "CANCELADA"],
+    "ENCERRADA": [],
+    "CANCELADA": []
+  }
+}
