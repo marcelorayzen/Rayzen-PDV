@@ -4,18 +4,20 @@ import {
   type ConfigureFiscalEmitterRequest,
   type CreateBackupRequest,
   type CompleteFirstRunRequest,
+  type UpdateBrandLogoRequest,
   IPC_CHANNELS,
   type AddComandaItemRequest,
   type AuthLoginRequest,
   type BackupListRequest,
   type CancelComandaItemRequest,
   type CatalogGetProductRequest,
+  type CatalogUpsertProductRequest,
   type CloseCashSessionRequest,
   type EnqueueProductionPrintRequest,
   type ListPrintJobsRequest,
-  type DatabaseStatusSnapshot,
   type ExportLogsRequest,
   type ExportLogsResult,
+  type GetComandaWorkspaceRequest,
   type GetFiscalDocumentStatusRequest,
   type ListPendingFiscalQueueRequest,
   type MainBootstrapSnapshot,
@@ -33,9 +35,12 @@ import {
   type ReprocessPrintJobRequest,
   type ReprintSecondCopyRequest,
   type RestoreBackupRequest,
+  type SaveOperatorRequest,
   type SendComandaToProductionRequest,
   type StartCashClosureRequest,
   type StartComandaCheckoutRequest,
+  type ReopenComandaRequest,
+  type RequestComandaCashCheckoutRequest,
   type ConfirmComandaPaymentRequest
 } from "../contracts/ipc.js";
 import type { MainProcessLogStore } from "./log-store.js";
@@ -48,6 +53,8 @@ import type { PdvRoundtripService } from "./pdv/service.js";
 import type { PrintSpoolService } from "./printing/service.js";
 import type { OperationalSupportService } from "./support/service.js";
 import type { FirstRunSetupService } from "./setup/service.js";
+import type { WaiterHttpServer } from "./waiter/http-server.js";
+import type { WaiterServerStatusSnapshot } from "../contracts/ipc.js";
 
 export interface IpcMainLike {
   handle(channel: string, listener: (_event: unknown, payload?: unknown) => unknown | Promise<unknown>): void;
@@ -67,6 +74,7 @@ export interface MainProcessServices {
   print: PrintSpoolService;
   setup: FirstRunSetupService;
   support: OperationalSupportService;
+  waiter: WaiterHttpServer;
 }
 
 export interface RegisteredIpcHandlers {
@@ -95,6 +103,10 @@ export function registerMainIpcHandlers(
       (_event, payload) => services.setup.completeFirstRun(payload as CompleteFirstRunRequest)
     ],
     [
+      IPC_CHANNELS.setupUpdateBrandLogo,
+      (_event, payload) => services.setup.updateBrandLogo(payload as UpdateBrandLogoRequest)
+    ],
+    [
       IPC_CHANNELS.dbGetStatus,
       () => services.database.getStatus()
     ],
@@ -119,8 +131,16 @@ export function registerMainIpcHandlers(
       (_event, payload) => services.catalog.findProduct((payload as CatalogGetProductRequest).productId)
     ],
     [
+      IPC_CHANNELS.catalogUpsertProduct,
+      (_event, payload) => services.catalog.upsertProduct(payload as CatalogUpsertProductRequest)
+    ],
+    [
       IPC_CHANNELS.pdvGetOperationalSnapshot,
       () => services.pdv.getOperationalSnapshot()
+    ],
+    [
+      IPC_CHANNELS.comandaGetWorkspace,
+      (_event, payload) => services.pdv.getComandaWorkspace(payload as GetComandaWorkspaceRequest)
     ],
     [
       IPC_CHANNELS.comandaOpen,
@@ -141,6 +161,14 @@ export function registerMainIpcHandlers(
     [
       IPC_CHANNELS.comandaStartCheckout,
       (_event, payload) => services.pdv.startComandaCheckout(payload as StartComandaCheckoutRequest)
+    ],
+    [
+      IPC_CHANNELS.comandaReopenComanda,
+      (_event, payload) => services.pdv.reopenComanda(payload as ReopenComandaRequest)
+    ],
+    [
+      IPC_CHANNELS.comandaRequestCashCheckout,
+      (_event, payload) => services.pdv.requestComandaCashCheckout(payload as RequestComandaCashCheckoutRequest)
     ],
     [
       IPC_CHANNELS.comandaConfirmPayment,
@@ -265,6 +293,18 @@ export function registerMainIpcHandlers(
     [
       IPC_CHANNELS.printReprintSecondCopy,
       (_event, payload) => services.print.reprintSecondCopy(payload as ReprintSecondCopyRequest)
+    ],
+    [
+      IPC_CHANNELS.operatorList,
+      () => services.auth.listOperators()
+    ],
+    [
+      IPC_CHANNELS.operatorSave,
+      (_event, payload) => services.auth.saveOperator(payload as SaveOperatorRequest)
+    ],
+    [
+      IPC_CHANNELS.waiterGetStatus,
+      (): WaiterServerStatusSnapshot => services.waiter.getStatus()
     ]
   ]);
 

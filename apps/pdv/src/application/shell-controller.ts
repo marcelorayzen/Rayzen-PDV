@@ -15,11 +15,10 @@ import {
   type ComandaPaymentMethod,
   type FocusTarget,
   type MainViewId,
-  type ShellState
+  type ShellState,
+  type TeamWorkspaceState
 } from "../domain/index.js";
 import type {
-  InstallationStatusSnapshot,
-  PrintDriverPrinterSnapshot,
   CashWorkspaceSnapshot,
   ComandaWorkspaceSnapshot,
   OperationalSnapshot
@@ -55,13 +54,15 @@ export class PdvShellController {
   }
 
   async start(): Promise<void> {
-    const [runtime, installation, session, catalogProducts, operational, availablePrinters] = await Promise.all([
+    const [runtime, installation, session, catalogProducts, operational, availablePrinters, operators, waiterStatus] = await Promise.all([
       this.#desktopBridge.getRuntimeSnapshot(),
       this.#desktopBridge.getInstallationStatus(),
       this.#desktopBridge.getOperatorSession(),
       this.#desktopBridge.listCatalogProducts(),
       this.#desktopBridge.getOperationalSnapshot(),
-      this.#desktopBridge.listPrintPrinters()
+      this.#desktopBridge.listPrintPrinters(),
+      this.#desktopBridge.listOperators(),
+      this.#desktopBridge.getWaiterStatus()
     ]);
 
     this.#dispatch({
@@ -76,9 +77,18 @@ export class PdvShellController {
     this.#syncComandaWorkspace({
       ...this.#state.comandaWorkspace,
       catalogProducts,
-      selectedCatalogProductId: catalogProducts[0]?.productId ?? null
+      selectedCatalogProductId: catalogProducts[0]?.productId ?? null,
+      selectedCatalogCategory: catalogProducts[0]?.category ?? null
     });
     this.#applyOperationalSnapshot(operational);
+    this.#syncTeamWorkspace({
+      ...this.#state.teamWorkspace,
+      operators
+    });
+    this.#dispatch({
+      type: "waiter-status-loaded",
+      url: waiterStatus?.url ?? null
+    });
 
     if (session) {
       this.#dispatch({
@@ -106,6 +116,13 @@ export class PdvShellController {
     this.#syncFirstRunWorkspace({
       ...this.#state.firstRunWorkspace,
       companyDocumentDraft: value.replace(/[^\d./-]/g, "").slice(0, 18)
+    });
+  }
+
+  updateFirstRunCompanyLogoFilePath(value: string): void {
+    this.#syncFirstRunWorkspace({
+      ...this.#state.firstRunWorkspace,
+      companyLogoFilePathDraft: value.trim().slice(0, 260)
     });
   }
 
@@ -139,6 +156,7 @@ export class PdvShellController {
         companyLegalName: this.#state.firstRunWorkspace.companyLegalNameDraft,
         companyTradeName: this.#state.firstRunWorkspace.companyTradeNameDraft || null,
         companyDocument: this.#state.firstRunWorkspace.companyDocumentDraft || null,
+        companyLogoFilePath: this.#state.firstRunWorkspace.companyLogoFilePathDraft || null,
         printers: {
           cozinha: this.#state.firstRunWorkspace.cozinhaPrinterDraft,
           bar: this.#state.firstRunWorkspace.barPrinterDraft,
@@ -352,11 +370,205 @@ export class PdvShellController {
     });
   }
 
+  openCatalogNewProductForm(): void {
+    this.#dispatch({
+      type: "catalog-draft-updated",
+      draft: {
+        mode: "new",
+        nomeDraft: "",
+        categoriaDraft: "",
+        setorDraft: "BAR",
+        precoDraft: "",
+        shortcutHintDraft: ""
+      }
+    });
+  }
+
+  closeCatalogNewProductForm(): void {
+    this.#dispatch({
+      type: "catalog-draft-updated",
+      draft: { ...this.#state.catalogDraft, mode: "list" }
+    });
+  }
+
+  updateCatalogDraftField(field: "nomeDraft" | "categoriaDraft" | "setorDraft" | "precoDraft" | "shortcutHintDraft", value: string): void {
+    this.#dispatch({
+      type: "catalog-draft-updated",
+      draft: { ...this.#state.catalogDraft, [field]: value }
+    });
+  }
+
+  async saveCatalogProduct(): Promise<void> {
+    const draft = this.#state.catalogDraft;
+    const nome = draft.nomeDraft.trim();
+    const categoria = draft.categoriaDraft.trim();
+    const setor = draft.setorDraft.trim();
+    const precoCents = Math.round(
+      Number.parseFloat(draft.precoDraft.replace(",", ".")) * 100
+    );
+    const shortcutHint = draft.shortcutHintDraft.trim();
+
+    if (!nome || !categoria || !setor || !Number.isFinite(precoCents) || precoCents < 0) {
+      this.#setFeedback("Preencha todos os campos obrigatorios: nome, categoria, setor e preco.", "error");
+      return;
+    }
+
+    try {
+      const saved = await this.#desktopBridge.upsertCatalogProduct({
+        nome,
+        categoria,
+        setor,
+        precoCents,
+        shortcutHint: shortcutHint || nome.substring(0, 2).toUpperCase()
+      });
+
+      const updatedProducts = [...this.#state.comandaWorkspace.catalogProducts];
+      const existingIdx = updatedProducts.findIndex((p) => p.productId === saved.productId);
+
+      if (existingIdx >= 0) {
+        updatedProducts[existingIdx] = saved;
+      } else {
+        updatedProducts.push(saved);
+      }
+
+      this.#syncComandaWorkspace({
+        ...this.#state.comandaWorkspace,
+        catalogProducts: updatedProducts
+      });
+
+      this.#dispatch({
+        type: "catalog-draft-updated",
+        draft: {
+          mode: "list",
+          nomeDraft: "",
+          categoriaDraft: "",
+          setorDraft: "BAR",
+          precoDraft: "",
+          shortcutHintDraft: ""
+        }
+      });
+      this.#setFeedback(`Produto "${saved.label}" salvo no catalogo.`, "info");
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
+  selectCatalogCategory(category: string): void {
+    this.#syncComandaWorkspace({
+      ...this.#state.comandaWorkspace,
+      selectedCatalogCategory: category
+    });
+  }
+
+  async addProductToCurrentComanda(productId: string): Promise<void> {
+    const actor = this.#requireComandaActor();
+    const currentComanda = this.#getSelectedComanda();
+
+    if (!actor || !currentComanda) {
+      this.#setFeedback("Abra uma comanda antes de lancar itens.", "error");
+      return;
+    }
+
+    const product = this.#state.comandaWorkspace.catalogProducts.find((p) => p.productId === productId);
+
+    if (!product) {
+      this.#setFeedback("Produto nao encontrado.", "error");
+      return;
+    }
+
+    try {
+      const workspace = await this.#desktopBridge.addComandaItem({
+        comandaId: currentComanda.comandaId,
+        produtoId: product.productId,
+        productLabel: product.label,
+        setor: product.setor,
+        quantity: 1,
+        unitPriceCents: product.unitPriceCents,
+        note: null,
+        actor
+      });
+
+      this.#applyComandaWorkspaceSnapshot(workspace, {
+        selectedItemId: workspace.currentComanda?.items.at(-1)?.itemId ?? null,
+        itemNoteDraft: "",
+        quantityDraft: "1"
+      });
+      this.#setFeedback(`${product.label} adicionado.`, "info");
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
   selectComandaItem(itemId: string): void {
     this.#syncComandaWorkspace({
       ...this.#state.comandaWorkspace,
       selectedItemId: itemId
     });
+  }
+
+  async selectMesaComanda(comandaId: string, nextViewId?: MainViewId): Promise<void> {
+    const activeComanda = this.#state.comandaWorkspace.activeComandas.find((item) => item.comandaId === comandaId);
+
+    if (!activeComanda) {
+      return;
+    }
+
+    try {
+      const workspace = await this.#desktopBridge.getComandaWorkspace({
+        comandaId
+      });
+
+      this.#applyComandaWorkspaceSnapshot(workspace, {
+        selectedComandaId: comandaId,
+        comandaNumeroDraft: workspace.currentComanda?.numero ?? this.#state.comandaWorkspace.comandaNumeroDraft,
+        mesaDraft: workspace.currentComanda?.mesaId ?? "",
+        cancelReasonDraft: "",
+        checkoutAmountDraft: ""
+      });
+
+      if (nextViewId) {
+        this.navigate(nextViewId);
+        this.#dispatch({
+          type: "focus-requested",
+          focusTarget: nextViewId === "comandas" ? "product-search" : this.#resolveFocusForView(nextViewId)
+        });
+      }
+
+      this.#setFeedback(
+        `Comanda ${workspace.currentComanda?.numero ?? activeComanda.numero} pronta para continuidade${workspace.currentComanda?.mesaId ? ` na mesa ${workspace.currentComanda.mesaId}` : ""}.`,
+        "info"
+      );
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
+  async saveBrandLogoConfiguration(): Promise<void> {
+    if (!this.#state.firstRunWorkspace.status) {
+      return;
+    }
+
+    try {
+      const status = await this.#desktopBridge.updateBrandLogo({
+        companyLogoFilePath: this.#state.firstRunWorkspace.companyLogoFilePathDraft || null,
+        occurredAt: new Date().toISOString()
+      });
+      const availablePrinters = await this.#desktopBridge.listPrintPrinters();
+
+      this.#dispatch({
+        type: "first-run-loaded",
+        status,
+        availablePrinters
+      });
+      this.#setFeedback(
+        this.#state.firstRunWorkspace.companyLogoFilePathDraft.trim().length > 0
+          ? "Marca do terminal atualizada."
+          : "Logo removido da marca do terminal.",
+        "info"
+      );
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
   }
 
   focusComandaNumero(): void {
@@ -452,13 +664,6 @@ export class PdvShellController {
       return;
     }
 
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
-
-    if (currentComanda && currentComanda.status !== "ENCERRADA" && currentComanda.status !== "CANCELADA") {
-      this.#setFeedback("Finalize ou cancele a comanda atual antes de abrir outra.", "error");
-      return;
-    }
-
     try {
       const draftNumero = this.#state.comandaWorkspace.comandaNumeroDraft.trim();
       const workspace = await this.#desktopBridge.openComanda({
@@ -468,6 +673,7 @@ export class PdvShellController {
       });
 
       this.#applyComandaWorkspaceSnapshot(workspace, {
+        selectedComandaId: workspace.currentComanda?.comandaId ?? null,
         selectedItemId: null,
         cancelReasonDraft: "",
         checkoutAmountDraft: ""
@@ -485,7 +691,7 @@ export class PdvShellController {
 
   async addSelectedProductToCurrentComanda(): Promise<void> {
     const actor = this.#requireComandaActor();
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
+    const currentComanda = this.#getSelectedComanda();
 
     if (!actor || !currentComanda) {
       this.#setFeedback("Abra uma comanda antes de lancar itens.", "error");
@@ -528,7 +734,7 @@ export class PdvShellController {
 
   async sendCurrentComandaToProduction(): Promise<void> {
     const actor = this.#requireComandaActor();
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
+    const currentComanda = this.#getSelectedComanda();
 
     if (!actor || !currentComanda) {
       this.#setFeedback("Abra uma comanda antes de enviar para produção.", "error");
@@ -556,7 +762,7 @@ export class PdvShellController {
 
   async generatePreContaForCurrentComanda(): Promise<void> {
     const actor = this.#requireComandaActor();
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
+    const currentComanda = this.#getSelectedComanda();
 
     if (!actor || !currentComanda) {
       this.#setFeedback("Abra uma comanda antes de gerar a pre-conta.", "error");
@@ -564,6 +770,19 @@ export class PdvShellController {
     }
 
     try {
+      // Se a comanda está ABERTA e tem itens LANCADO, envia para produção automaticamente
+      if (currentComanda.status === "ABERTA") {
+        const hasLancado = currentComanda.items.some((item) => item.status === "LANCADO");
+        if (!hasLancado) {
+          this.#setFeedback("Adicione itens na comanda antes de gerar a pre-conta.", "error");
+          return;
+        }
+        await this.#desktopBridge.sendComandaToProduction({
+          comandaId: currentComanda.comandaId,
+          actor
+        });
+      }
+
       const workspace = await this.#desktopBridge.startComandaCheckout({
         comandaId: currentComanda.comandaId,
         actor
@@ -584,9 +803,53 @@ export class PdvShellController {
     }
   }
 
+  async reopenCurrentComanda(): Promise<void> {
+    const actor = this.#requireComandaActor();
+    const currentComanda = this.#getSelectedComanda();
+
+    if (!actor || !currentComanda) {
+      this.#setFeedback("Selecione uma comanda para reabrir.", "error");
+      return;
+    }
+
+    try {
+      const workspace = await this.#desktopBridge.reopenComanda({
+        comandaId: currentComanda.comandaId,
+        actor
+      });
+
+      this.#applyComandaWorkspaceSnapshot(workspace);
+      this.#setFeedback(`Comanda ${workspace.currentComanda?.numero ?? currentComanda.numero} reaberta. Adicione itens ou gere nova pre-conta.`, "info");
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
+  async requestCurrentComandaCashCheckout(): Promise<void> {
+    const actor = this.#requireComandaActor();
+    const currentComanda = this.#getSelectedComanda();
+
+    if (!actor || !currentComanda) {
+      this.#setFeedback("Selecione uma comanda antes de encaminhar ao caixa.", "error");
+      return;
+    }
+
+    try {
+      const workspace = await this.#desktopBridge.requestComandaCashCheckout({
+        comandaId: currentComanda.comandaId,
+        actor
+      });
+
+      this.#applyComandaWorkspaceSnapshot(workspace);
+      this.#setFeedback(`Comanda ${workspace.currentComanda?.numero ?? currentComanda.numero} encaminhada para a fila principal do caixa.`, "info");
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
   async checkoutCurrentComanda(): Promise<void> {
     const actor = this.#requireComandaActor();
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
+    const currentComanda = this.#getSelectedComanda();
 
     if (!actor || !currentComanda) {
       this.#setFeedback("Abra uma comanda antes de fechar o checkout.", "error");
@@ -630,7 +893,7 @@ export class PdvShellController {
 
   async cancelSelectedItem(): Promise<void> {
     const actor = this.#requireComandaActor();
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
+    const currentComanda = this.#getSelectedComanda();
     const selectedItemId = this.#state.comandaWorkspace.selectedItemId;
 
     if (!actor || !currentComanda || !selectedItemId) {
@@ -656,7 +919,7 @@ export class PdvShellController {
   }
 
   fillCheckoutWithDueAmount(): void {
-    const currentComanda = this.#state.comandaWorkspace.currentComanda;
+    const currentComanda = this.#getSelectedComanda();
 
     if (!currentComanda) {
       return;
@@ -666,7 +929,7 @@ export class PdvShellController {
 
     this.#syncComandaWorkspace({
       ...this.#state.comandaWorkspace,
-      checkoutAmountDraft: formatCentsToAmountInput(totals.itemSubtotalCents)
+      checkoutAmountDraft: formatCentsToAmountInput(totals.dueAmountCents)
     });
     this.#dispatch({
       type: "focus-requested",
@@ -857,6 +1120,144 @@ export class PdvShellController {
       const workspace = await this.#desktopBridge.exportCashAudit();
       this.#applyCashWorkspaceSnapshot(workspace);
       this.#setFeedback("Bundle auditável do caixa pronto para conferência local.", "info");
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
+  async loadTeamOperators(): Promise<void> {
+    try {
+      const operators = await this.#desktopBridge.listOperators();
+      this.#syncTeamWorkspace({
+        ...this.#state.teamWorkspace,
+        operators
+      });
+    } catch (error) {
+      this.#handleDomainError(error);
+    }
+  }
+
+  updateTeamDraftField(field: keyof Pick<TeamWorkspaceState, "nomeDraft" | "codeDraft" | "pinDraft">, value: string): void {
+    this.#syncTeamWorkspace({
+      ...this.#state.teamWorkspace,
+      [field]: value.slice(0, 80)
+    });
+  }
+
+  updateTeamRoleDraft(role: TeamWorkspaceState["roleDraft"]): void {
+    this.#syncTeamWorkspace({
+      ...this.#state.teamWorkspace,
+      roleDraft: role
+    });
+  }
+
+  selectTeamOperator(operatorId: string): void {
+    const operator = this.#state.teamWorkspace.operators.find((op) => op.operatorId === operatorId);
+
+    if (!operator) {
+      return;
+    }
+
+    this.#syncTeamWorkspace({
+      ...this.#state.teamWorkspace,
+      selectedOperatorId: operatorId,
+      nomeDraft: operator.nome,
+      codeDraft: operator.operatorCode,
+      pinDraft: "",
+      roleDraft: operator.role,
+      formMode: "edit"
+    });
+  }
+
+  openTeamNewOperatorForm(): void {
+    this.#syncTeamWorkspace({
+      ...this.#state.teamWorkspace,
+      selectedOperatorId: null,
+      nomeDraft: "",
+      codeDraft: "",
+      pinDraft: "",
+      roleDraft: "GARCOM",
+      formMode: "new"
+    });
+    this.#dispatch({
+      type: "focus-requested",
+      focusTarget: "equipe-operator-nome"
+    });
+  }
+
+  async saveTeamOperator(): Promise<void> {
+    if (this.#state.teamWorkspace.submitting) {
+      return;
+    }
+
+    this.#syncTeamWorkspace({
+      ...this.#state.teamWorkspace,
+      submitting: true
+    });
+
+    try {
+      const workspace = this.#state.teamWorkspace;
+      const saved = await this.#desktopBridge.saveOperator({
+        operatorId: workspace.selectedOperatorId,
+        operatorCode: workspace.codeDraft,
+        nome: workspace.nomeDraft,
+        pin: workspace.pinDraft,
+        role: workspace.roleDraft,
+        ativo: true
+      });
+
+      const operators = await this.#desktopBridge.listOperators();
+
+      this.#syncTeamWorkspace({
+        ...this.#state.teamWorkspace,
+        operators,
+        selectedOperatorId: saved.operatorId,
+        nomeDraft: saved.nome,
+        codeDraft: saved.operatorCode,
+        pinDraft: "",
+        roleDraft: saved.role,
+        formMode: "edit",
+        submitting: false
+      });
+      this.#setFeedback(`Colaborador ${saved.nome} salvo com sucesso.`, "info");
+    } catch (error) {
+      this.#syncTeamWorkspace({
+        ...this.#state.teamWorkspace,
+        submitting: false
+      });
+      this.#handleDomainError(error);
+    }
+  }
+
+  async deactivateTeamOperator(operatorId: string): Promise<void> {
+    const operator = this.#state.teamWorkspace.operators.find((op) => op.operatorId === operatorId);
+
+    if (!operator) {
+      return;
+    }
+
+    try {
+      await this.#desktopBridge.saveOperator({
+        operatorId: operator.operatorId,
+        operatorCode: operator.operatorCode,
+        nome: operator.nome,
+        pin: "",
+        role: operator.role,
+        ativo: false
+      });
+      const operators = await this.#desktopBridge.listOperators();
+
+      this.#syncTeamWorkspace({
+        ...this.#state.teamWorkspace,
+        operators,
+        selectedOperatorId: null,
+        formMode: "new",
+        nomeDraft: "",
+        codeDraft: "",
+        pinDraft: "",
+        roleDraft: "GARCOM"
+      });
+      this.#setFeedback(`Colaborador ${operator.nome} desativado.`, "info");
     } catch (error) {
       this.#handleDomainError(error);
     }
@@ -1056,6 +1457,8 @@ export class PdvShellController {
             ? "cash-divergence-reason"
             : "cash-receipt-amount"
           : "cash-opening-fund";
+      case "equipe":
+        return "equipe-operator-nome";
       default:
         return null;
     }
@@ -1082,6 +1485,13 @@ export class PdvShellController {
     });
   }
 
+  #syncTeamWorkspace(workspace: TeamWorkspaceState): void {
+    this.#dispatch({
+      type: "team-workspace-updated",
+      workspace
+    });
+  }
+
   #applyOperationalSnapshot(
     snapshot: OperationalSnapshot,
     overrides?: {
@@ -1097,21 +1507,28 @@ export class PdvShellController {
     snapshot: ComandaWorkspaceSnapshot,
     overrides?: Partial<ShellState["comandaWorkspace"]>
   ): void {
+    const requestedSelectedComandaId = overrides?.selectedComandaId ?? this.#state.comandaWorkspace.selectedComandaId;
+    const selectedComandaId = snapshot.activeComandas.some((item) => item.comandaId === requestedSelectedComandaId)
+      ? requestedSelectedComandaId
+      : snapshot.currentComanda?.comandaId ?? snapshot.activeComandas[0]?.comandaId ?? null;
+    const selectedComanda = snapshot.activeComandas.find((item) => item.comandaId === selectedComandaId) ?? null;
     const catalogProducts = [...this.#state.comandaWorkspace.catalogProducts];
     const selectedCatalogProductId = catalogProducts.some(
       (item) => item.productId === this.#state.comandaWorkspace.selectedCatalogProductId
     )
       ? this.#state.comandaWorkspace.selectedCatalogProductId
       : catalogProducts[0]?.productId ?? null;
-    const selectedItemId = snapshot.currentComanda?.items.some(
+    const selectedItemId = selectedComanda?.items.some(
       (item) => item.itemId === this.#state.comandaWorkspace.selectedItemId
     )
       ? this.#state.comandaWorkspace.selectedItemId
-      : snapshot.currentComanda?.items.at(-1)?.itemId ?? null;
+      : selectedComanda?.items.at(-1)?.itemId ?? null;
 
     this.#syncComandaWorkspace({
       ...this.#state.comandaWorkspace,
-      currentComanda: snapshot.currentComanda,
+      selectedComandaId,
+      activeComandas: snapshot.activeComandas,
+      mesaGroups: snapshot.mesaGroups,
       auditTrail: snapshot.auditTrail,
       lastPreContaSnapshot: snapshot.lastPreContaSnapshot,
       catalogProducts,
@@ -1119,6 +1536,11 @@ export class PdvShellController {
       selectedItemId,
       ...overrides
     });
+  }
+
+  #getSelectedComanda() {
+    const { selectedComandaId, activeComandas } = this.#state.comandaWorkspace;
+    return activeComandas.find((item) => item.comandaId === selectedComandaId) ?? null;
   }
 
   #applyCashWorkspaceSnapshot(
@@ -1143,7 +1565,12 @@ export class PdvShellController {
   }
 
   #handleDomainError(error: unknown): void {
-    const message = error instanceof Error ? error.message : "Falha local ao operar o PDV.";
+    let message = error instanceof Error ? error.message : "Falha local ao operar o PDV.";
+    // Electron IPC wraps errors as "Error invoking remote method '...': DomainError: <real message>"
+    const domainMatch = message.match(/(?:DomainError|ComandaDomainError|CashDomainError):\s(.+)$/);
+    if (domainMatch?.[1]) {
+      message = domainMatch[1];
+    }
     this.#setFeedback(message, "error");
   }
 

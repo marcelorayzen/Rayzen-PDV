@@ -925,6 +925,27 @@ export async function runIpcScenario() {
           role: "GARCOM"
         }
       });
+      const openedSecondComanda = await ipcMain.invoke(IPC_CHANNELS.comandaOpen, {
+        numero: "502",
+        mesaId: "M15",
+        actor: {
+          userId: "opr_gc_01",
+          terminalId: "pdv-main",
+          role: "GARCOM"
+        }
+      });
+      const resumedFirstComanda = await ipcMain.invoke(IPC_CHANNELS.comandaOpen, {
+        numero: "501",
+        mesaId: "M15",
+        actor: {
+          userId: "opr_gc_01",
+          terminalId: "pdv-main",
+          role: "GARCOM"
+        }
+      });
+      const workspaceForSecondComanda = await ipcMain.invoke(IPC_CHANNELS.comandaGetWorkspace, {
+        comandaId: openedSecondComanda.currentComanda.comandaId
+      });
       const withKitchenItem = await ipcMain.invoke(IPC_CHANNELS.comandaAddItem, {
         comandaId: openedComanda.currentComanda.comandaId,
         produtoId: "prod_k_1",
@@ -1140,6 +1161,11 @@ export async function runIpcScenario() {
       assert.equal(openedCash.currentSession.status, "ABERTO");
       assert.equal(cashStatusAfterOpen.currentSession.status, "ABERTO");
       assert.equal(openedComanda.currentComanda.status, "ABERTA");
+      assert.equal(openedSecondComanda.currentComanda.numero, "502");
+      assert.equal(openedSecondComanda.activeComandas.length, 2);
+      assert.equal(openedSecondComanda.mesaGroups.find((group) => group.mesaId === "M15")?.comandaCount, 2);
+      assert.equal(resumedFirstComanda.currentComanda.comandaId, openedComanda.currentComanda.comandaId);
+      assert.equal(workspaceForSecondComanda.currentComanda.comandaId, openedSecondComanda.currentComanda.comandaId);
       assert.equal(withKitchenItem.currentComanda.items.length, 1);
       assert.equal(withAllItems.currentComanda.items.length, 2);
       assert.equal(sentToProduction.currentComanda.status, "EM_PRODUCAO");
@@ -1327,6 +1353,9 @@ export async function runPreloadScenario() {
   assert.equal(cashStatus.currentSession?.cashSessionId, "cash_601");
   assert.equal(cashSummary?.totals.totalExpectedAmountCents, 19700);
   assert.equal(operational.comanda.currentComanda?.numero, "601");
+  assert.equal(operational.comanda.activeComandas.length, 1);
+  assert.equal(operational.comanda.mesaGroups.length, 1);
+  assert.equal(operational.comanda.mesaGroups[0]?.mesaId, "M20");
   assert.equal(fiscalStatus.emitters[0].provider, "NS_TECNOLOGIA");
   assert.equal(fiscalPending.length, 1);
   assert.equal(fiscalDocument?.fiscalDocId, "nfce_900");
@@ -1699,24 +1728,39 @@ class FakeIpcRenderer {
     }
 
     if (channel === IPC_CHANNELS.pdvGetOperationalSnapshot) {
+      const currentComanda = {
+        comandaId: "cmd_601",
+        numero: "601",
+        mesaId: "M20",
+        atendimentoRef: null,
+        status: "EM_PAGAMENTO",
+        openedAt: "2026-03-12T18:00:00.000Z",
+        currentOwnerUserId: "opr_gc_01",
+        cancelledAt: null,
+        cancellationReason: null,
+        closedAt: null,
+        items: [],
+        payments: [],
+        preContas: [],
+        productionBatches: []
+      };
+
       return {
         comanda: {
-          currentComanda: {
-            comandaId: "cmd_601",
-            numero: "601",
-            mesaId: "M20",
-            atendimentoRef: null,
-            status: "EM_PAGAMENTO",
-            openedAt: "2026-03-12T18:00:00.000Z",
-            currentOwnerUserId: "opr_gc_01",
-            cancelledAt: null,
-            cancellationReason: null,
-            closedAt: null,
-            items: [],
-            payments: [],
-            preContas: [],
-            productionBatches: []
-          },
+          currentComanda,
+          activeComandas: [currentComanda],
+          mesaGroups: [
+            {
+              mesaId: "M20",
+              comandas: [currentComanda],
+              comandaCount: 1,
+              itemCount: 0,
+              totalAmountCents: 0,
+              paidAmountCents: 0,
+              dueAmountCents: 0,
+              statuses: ["EM_PAGAMENTO"]
+            }
+          ],
           auditTrail: [],
           lastPreContaSnapshot: null
         },

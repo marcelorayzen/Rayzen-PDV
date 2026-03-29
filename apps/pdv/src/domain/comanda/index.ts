@@ -6,6 +6,8 @@ export {
   checkoutComanda,
   generateComandaPreConta,
   openComanda,
+  reopenComanda,
+  requestComandaCashCheckout,
   sendComandaToProduction
 } from "./aggregate.js";
 export { ComandaDomainError } from "./errors.js";
@@ -30,5 +32,7 @@ export type {
   OpenComandaInput,
   PreContaSnapshot,
   ProductionBatch,
+  ReopenComandaInput,
+  RequestComandaCashCheckoutInput,
   SendToProductionInput
 } from "./types.js";

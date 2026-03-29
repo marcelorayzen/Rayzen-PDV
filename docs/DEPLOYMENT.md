@@ -139,7 +139,7 @@ Fluxo baseline:
 
 ## Observacoes operacionais
 
-- o `runtime-config.json` em `%ProgramData%\\RayzenPDV\\config\\` guarda o estado do first-run, empresa local e impressoras do terminal
+- o `runtime-config.json` em `%ProgramData%\\RayzenPDV\\config\\` guarda o estado do first-run, empresa local, caminho opcional do logo da marca e impressoras do terminal
 - o ZIP continua sendo o baseline oficial de rollout manual e de rollback rapido
 - o target Squirrel e tentado no `release:manual`, mas o rollout nao para quando o host so conseguir gerar o ZIP
 - o app desktop nao expoe API HTTP local; suporte, backup, restore, spool e fiscal seguem via IPC e arquivos locais

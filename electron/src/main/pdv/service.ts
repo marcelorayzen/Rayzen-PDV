@@ -9,7 +9,6 @@ import type {
 } from "@rayzen/db";
 import {
   addComandaItem,
-  calculateCashSessionTotals,
   calculateComandaTotals,
   cancelComandaItem,
   checkoutComanda,
@@ -17,6 +16,8 @@ import {
   generateComandaPreConta,
   openCashSession,
   openComanda,
+  reopenComanda,
+  requestComandaCashCheckout,
   receiveCashPayment,
   registerCashSupply,
   registerCashWithdrawal,
@@ -39,13 +40,17 @@ import type {
   CashWorkspaceSnapshot,
   CloseCashSessionRequest,
   ComandaWorkspaceSnapshot,
+  ComandaMesaGroupSnapshot,
   ConfirmComandaPaymentRequest,
+  GetComandaWorkspaceRequest,
   OpenCashSessionRequest,
   OpenComandaRequest,
   OperationalSnapshot,
   RegisterCashReceiptRequest,
   RegisterCashSupplyRequest,
   RegisterCashWithdrawalRequest,
+  ReopenComandaRequest,
+  RequestComandaCashCheckoutRequest,
   SendComandaToProductionRequest,
   StartCashClosureRequest,
   StartComandaCheckoutRequest
@@ -80,25 +85,25 @@ export class PdvRoundtripService {
   }
 
   getOperationalSnapshot(terminalId = this.#defaultTerminalId): OperationalSnapshot {
-    const activeComanda = this.#database.comandas.findLatestActive();
+    const activeComandas = this.#database.comandas.listActive().map((persisted) => hydratePersistedComandaAggregate(this.#database, persisted));
+    const activeComanda = activeComandas[0] ?? null;
     const activeCash = this.#database.cashSessions.findActiveByTerminalId(terminalId);
 
     return {
-      comanda: activeComanda ? this.#loadComandaWorkspace(activeComanda.comanda.comandaId) : emptyComandaWorkspace(),
+      comanda: activeComanda ? this.#loadComandaWorkspace(activeComanda.comandaId, activeComandas) : emptyComandaWorkspace(),
       cash: activeCash ? this.#loadCashWorkspace(activeCash.session.cashSessionId) : emptyCashWorkspace()
     };
   }
 
+  getComandaWorkspace(request: GetComandaWorkspaceRequest): ComandaWorkspaceSnapshot {
+    return this.#loadComandaWorkspace(request.comandaId);
+  }
+
   openComanda(request: OpenComandaRequest): ComandaWorkspaceSnapshot {
-    const active = this.#database.comandas.findLatestActive();
     const existingByNumero = this.#database.comandas.findLatestActiveByNumero(request.numero.trim());
 
-    if (active && active.comanda.status !== "ENCERRADA" && active.comanda.status !== "CANCELADA") {
-      if (existingByNumero) {
-        return this.#loadComandaWorkspace(existingByNumero.comanda.comandaId);
-      }
-
-      throw new Error("Finalize ou cancele a comanda atual antes de abrir outra.");
+    if (existingByNumero) {
+      return this.#loadComandaWorkspace(existingByNumero.comanda.comandaId);
     }
 
     const mutation = openComanda({
@@ -197,6 +202,30 @@ export class PdvRoundtripService {
     const aggregate = this.#requireComanda(request.comandaId);
     const mutation = generateComandaPreConta(aggregate, {
       preContaId: this.#nextId("pre"),
+      actor: request.actor,
+      occurredAt: this.#nowIso(),
+      auditEventId: this.#nextId("evt")
+    });
+
+    this.#database.comandas.saveAggregate(mapComandaAggregateForSave(mutation.comanda, mutation.auditEvents));
+    return this.#loadComandaWorkspace(request.comandaId);
+  }
+
+  reopenComanda(request: ReopenComandaRequest): ComandaWorkspaceSnapshot {
+    const aggregate = this.#requireComanda(request.comandaId);
+    const mutation = reopenComanda(aggregate, {
+      actor: request.actor,
+      occurredAt: this.#nowIso(),
+      auditEventId: this.#nextId("evt")
+    });
+
+    this.#database.comandas.saveAggregate(mapComandaAggregateForSave(mutation.comanda, mutation.auditEvents));
+    return this.#loadComandaWorkspace(request.comandaId);
+  }
+
+  requestComandaCashCheckout(request: RequestComandaCashCheckoutRequest): ComandaWorkspaceSnapshot {
+    const aggregate = this.#requireComanda(request.comandaId);
+    const mutation = requestComandaCashCheckout(aggregate, {
       actor: request.actor,
       occurredAt: this.#nowIso(),
       auditEventId: this.#nextId("evt")
@@ -411,7 +440,7 @@ export class PdvRoundtripService {
       throw new Error(`Comanda nao encontrada: ${comandaId}`);
     }
 
-    return mapPersistedComandaAggregate(persisted);
+    return hydratePersistedComandaAggregate(this.#database, persisted);
   }
 
   #requireActiveCashSession(terminalId: string): CashSessionAggregate {
@@ -440,18 +469,20 @@ export class PdvRoundtripService {
     throw new Error("Abra ou conclua um caixa antes de exportar a auditoria.");
   }
 
-  #loadComandaWorkspace(comandaId: string): ComandaWorkspaceSnapshot {
+  #loadComandaWorkspace(comandaId: string, activeComandas = this.#database.comandas.listActive().map((persisted) => hydratePersistedComandaAggregate(this.#database, persisted))): ComandaWorkspaceSnapshot {
     const persisted = this.#database.comandas.findById(comandaId);
 
     if (!persisted) {
       return emptyComandaWorkspace();
     }
 
-    const currentComanda = mapPersistedComandaAggregate(persisted);
     const auditTrail = loadComandaAuditTrail(this.#database, persisted);
+    const currentComanda = applyDerivedComandaState(mapPersistedComandaAggregate(persisted), auditTrail);
 
     return {
       currentComanda,
+      activeComandas,
+      mesaGroups: groupComandasByMesa(activeComandas),
       auditTrail,
       lastPreContaSnapshot: currentComanda.preContas.at(-1) ?? null
     };
@@ -490,6 +521,7 @@ function mapPersistedComandaAggregate(persisted: PersistedComandaAggregate): Com
     numero: persisted.comanda.numero,
     mesaId: persisted.comanda.mesaId,
     atendimentoRef: persisted.comanda.atendimentoRef,
+    cashCheckoutRequestedAt: null,
     status: persisted.comanda.status,
     openedAt: persisted.comanda.openedAt,
     currentOwnerUserId: persisted.comanda.currentOwnerUserId,
@@ -764,9 +796,72 @@ function toPrintRequestActor(actor: ComandaActor) {
 function emptyComandaWorkspace(): ComandaWorkspaceSnapshot {
   return {
     currentComanda: null,
+    activeComandas: [],
+    mesaGroups: [],
     auditTrail: [],
     lastPreContaSnapshot: null
   };
+}
+
+function hydratePersistedComandaAggregate(
+  database: RayzenDatabaseClient,
+  persisted: PersistedComandaAggregate
+): ComandaAggregate {
+  return applyDerivedComandaState(
+    mapPersistedComandaAggregate(persisted),
+    loadComandaAuditTrail(database, persisted)
+  );
+}
+
+function applyDerivedComandaState(comanda: ComandaAggregate, auditTrail: ComandaAuditEvent[]): ComandaAggregate {
+  const cashCheckoutRequestedAt = comanda.status === "EM_PAGAMENTO"
+    ? auditTrail
+      .filter((event) => event.entity === "COMANDA" && event.action === "COMANDA_ENCAMINHADA_CAIXA")
+      .at(-1)?.at ?? null
+    : null;
+
+  return {
+    ...comanda,
+    cashCheckoutRequestedAt
+  };
+}
+
+function groupComandasByMesa(activeComandas: ComandaAggregate[]): ComandaMesaGroupSnapshot[] {
+  const groups = new Map<string, ComandaAggregate[]>();
+
+  for (const comanda of activeComandas) {
+    const key = comanda.mesaId ?? "__SEM_MESA__";
+    const current = groups.get(key) ?? [];
+    current.push(comanda);
+    groups.set(key, current);
+  }
+
+  return [...groups.entries()]
+    .map(([key, comandas]) => {
+      const totals = comandas.map((comanda) => calculateComandaTotals(comanda));
+
+      return {
+        mesaId: key === "__SEM_MESA__" ? null : key,
+        comandas,
+        comandaCount: comandas.length,
+        itemCount: totals.reduce((sum, total) => sum + total.activeItemCount, 0),
+        totalAmountCents: totals.reduce((sum, total) => sum + total.itemSubtotalCents, 0),
+        paidAmountCents: totals.reduce((sum, total) => sum + total.paidAmountCents, 0),
+        dueAmountCents: totals.reduce((sum, total) => sum + total.dueAmountCents, 0),
+        statuses: [...new Set(comandas.map((comanda) => comanda.status))] as ComandaAggregate["status"][]
+      };
+    })
+    .sort((left, right) => {
+      if (left.mesaId === null) {
+        return 1;
+      }
+
+      if (right.mesaId === null) {
+        return -1;
+      }
+
+      return left.mesaId.localeCompare(right.mesaId, "pt-BR");
+    });
 }
 
 function emptyCashWorkspace(): CashWorkspaceSnapshot {

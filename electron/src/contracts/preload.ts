@@ -1,4 +1,5 @@
 import type {
+  WaiterServerStatusSnapshot,
   AddComandaItemRequest,
   AuthLoginRequest,
   AuthLoginResult,
@@ -7,15 +8,20 @@ import type {
   CancelComandaItemRequest,
   BackupListEntrySnapshot,
   BackupListRequest,
+  OperatorSnapshot,
+  SaveOperatorRequest,
   CatalogGetProductRequest,
   CatalogProductSnapshot,
+  CatalogUpsertProductRequest,
   CompleteFirstRunRequest,
+  UpdateBrandLogoRequest,
   CashWorkspaceSnapshot,
   CashStatusSnapshot,
   CashSummarySnapshot,
   CloseCashSessionRequest,
   ComandaWorkspaceSnapshot,
   ConfirmComandaPaymentRequest,
+  GetComandaWorkspaceRequest,
   ConfigureFiscalEmitterRequest,
   CreateBackupRequest,
   CreateBackupResult,
@@ -45,6 +51,8 @@ import type {
   ProcessPrintQueueResult,
   QueryFiscalStatusByAccessKeyRequest,
   QueueFiscalNfceRequest,
+  ReopenComandaRequest,
+  RequestComandaCashCheckoutRequest,
   RegisterCashReceiptRequest,
   RegisterCashSupplyRequest,
   RegisterCashWithdrawalRequest,
@@ -73,6 +81,7 @@ export interface RayzenDesktopApi {
   setup: {
     getStatus(): Promise<InstallationStatusSnapshot>;
     completeFirstRun(request: CompleteFirstRunRequest): Promise<InstallationStatusSnapshot>;
+    updateBrandLogo(request: UpdateBrandLogoRequest): Promise<InstallationStatusSnapshot>;
   };
   db: {
     getStatus(): Promise<DatabaseStatusSnapshot>;
@@ -85,14 +94,18 @@ export interface RayzenDesktopApi {
   catalog: {
     listProducts(): Promise<CatalogProductSnapshot[]>;
     getProduct(request: CatalogGetProductRequest): Promise<CatalogProductSnapshot | null>;
+    upsertProduct(request: CatalogUpsertProductRequest): Promise<CatalogProductSnapshot>;
   };
   pdv: {
     getOperationalSnapshot(): Promise<OperationalSnapshot>;
+    getComandaWorkspace(request: GetComandaWorkspaceRequest): Promise<ComandaWorkspaceSnapshot>;
     openComanda(request: OpenComandaRequest): Promise<ComandaWorkspaceSnapshot>;
     addComandaItem(request: AddComandaItemRequest): Promise<ComandaWorkspaceSnapshot>;
     cancelComandaItem(request: CancelComandaItemRequest): Promise<ComandaWorkspaceSnapshot>;
     sendComandaToProduction(request: SendComandaToProductionRequest): Promise<ComandaWorkspaceSnapshot>;
     startComandaCheckout(request: StartComandaCheckoutRequest): Promise<ComandaWorkspaceSnapshot>;
+    reopenComanda(request: ReopenComandaRequest): Promise<ComandaWorkspaceSnapshot>;
+    requestComandaCashCheckout(request: RequestComandaCashCheckoutRequest): Promise<ComandaWorkspaceSnapshot>;
     confirmComandaPayment(request: ConfirmComandaPaymentRequest): Promise<OperationalSnapshot>;
     openCashSession(request: OpenCashSessionRequest): Promise<CashWorkspaceSnapshot>;
     registerCashReceipt(request: RegisterCashReceiptRequest): Promise<CashWorkspaceSnapshot>;
@@ -128,5 +141,12 @@ export interface RayzenDesktopApi {
     processQueue(request?: ProcessPrintQueueRequest): Promise<ProcessPrintQueueResult>;
     reprocessJob(request: ReprocessPrintJobRequest): Promise<PrintSpoolJobSnapshot>;
     reprintSecondCopy(request: ReprintSecondCopyRequest): Promise<PrintSpoolJobSnapshot>;
+  };
+  team: {
+    listOperators(): Promise<OperatorSnapshot[]>;
+    saveOperator(request: SaveOperatorRequest): Promise<OperatorSnapshot>;
+  };
+  waiter: {
+    getStatus(): Promise<WaiterServerStatusSnapshot>;
   };
 }

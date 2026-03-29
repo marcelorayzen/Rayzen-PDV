@@ -47,6 +47,9 @@ export function createRayzenDesktopApi(
       },
       async completeFirstRun(request) {
         return renderer.invoke(IPC_CHANNELS.setupCompleteFirstRun, request) as Promise<Awaited<ReturnType<RayzenDesktopApi["setup"]["completeFirstRun"]>>>;
+      },
+      async updateBrandLogo(request) {
+        return renderer.invoke(IPC_CHANNELS.setupUpdateBrandLogo, request) as Promise<Awaited<ReturnType<RayzenDesktopApi["setup"]["updateBrandLogo"]>>>;
       }
     },
     db: {
@@ -75,12 +78,22 @@ export function createRayzenDesktopApi(
         return renderer.invoke(IPC_CHANNELS.catalogGetProduct, request) as Promise<
           Awaited<ReturnType<RayzenDesktopApi["catalog"]["getProduct"]>>
         >;
+      },
+      async upsertProduct(request) {
+        return renderer.invoke(IPC_CHANNELS.catalogUpsertProduct, request) as Promise<
+          Awaited<ReturnType<RayzenDesktopApi["catalog"]["upsertProduct"]>>
+        >;
       }
     },
     pdv: {
       async getOperationalSnapshot() {
         return renderer.invoke(IPC_CHANNELS.pdvGetOperationalSnapshot) as Promise<
           Awaited<ReturnType<RayzenDesktopApi["pdv"]["getOperationalSnapshot"]>>
+        >;
+      },
+      async getComandaWorkspace(request) {
+        return renderer.invoke(IPC_CHANNELS.comandaGetWorkspace, request) as Promise<
+          Awaited<ReturnType<RayzenDesktopApi["pdv"]["getComandaWorkspace"]>>
         >;
       },
       async openComanda(request) {
@@ -100,6 +113,16 @@ export function createRayzenDesktopApi(
       async startComandaCheckout(request) {
         return renderer.invoke(IPC_CHANNELS.comandaStartCheckout, request) as Promise<
           Awaited<ReturnType<RayzenDesktopApi["pdv"]["startComandaCheckout"]>>
+        >;
+      },
+      async reopenComanda(request) {
+        return renderer.invoke(IPC_CHANNELS.comandaReopenComanda, request) as Promise<
+          Awaited<ReturnType<RayzenDesktopApi["pdv"]["reopenComanda"]>>
+        >;
+      },
+      async requestComandaCashCheckout(request) {
+        return renderer.invoke(IPC_CHANNELS.comandaRequestCashCheckout, request) as Promise<
+          Awaited<ReturnType<RayzenDesktopApi["pdv"]["requestComandaCashCheckout"]>>
         >;
       },
       async confirmComandaPayment(request) {
@@ -214,6 +237,19 @@ export function createRayzenDesktopApi(
       },
       async reprintSecondCopy(request) {
         return renderer.invoke(IPC_CHANNELS.printReprintSecondCopy, request) as Promise<Awaited<ReturnType<RayzenDesktopApi["print"]["reprintSecondCopy"]>>>;
+      }
+    },
+    team: {
+      async listOperators() {
+        return renderer.invoke(IPC_CHANNELS.operatorList) as Promise<Awaited<ReturnType<RayzenDesktopApi["team"]["listOperators"]>>>;
+      },
+      async saveOperator(request) {
+        return renderer.invoke(IPC_CHANNELS.operatorSave, request) as Promise<Awaited<ReturnType<RayzenDesktopApi["team"]["saveOperator"]>>>;
+      }
+    },
+    waiter: {
+      async getStatus() {
+        return renderer.invoke(IPC_CHANNELS.waiterGetStatus) as Promise<Awaited<ReturnType<RayzenDesktopApi["waiter"]["getStatus"]>>>;
       }
     }
   };

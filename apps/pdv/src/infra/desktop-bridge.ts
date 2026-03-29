@@ -6,10 +6,12 @@ import type {
   AuthLogoutRequest,
   CancelComandaItemRequest,
   CatalogGetProductRequest,
+  CatalogUpsertProductRequest,
   CashWorkspaceSnapshot,
   CloseCashSessionRequest,
   ComandaWorkspaceSnapshot,
   ConfirmComandaPaymentRequest,
+  GetComandaWorkspaceRequest,
   GetFiscalDocumentStatusRequest,
   ListPendingFiscalQueueRequest,
   ListPrintJobsRequest,
@@ -18,6 +20,7 @@ import type {
   OpenCashSessionRequest,
   OpenComandaRequest,
   OperationalSnapshot,
+  OperatorSnapshot,
   ProcessFiscalQueueRequest,
   RayzenDesktopApi,
   ReprocessPrintJobRequest,
@@ -25,9 +28,13 @@ import type {
   RegisterCashSupplyRequest,
   RegisterCashWithdrawalRequest,
   QueryFiscalStatusByAccessKeyRequest,
+  SaveOperatorRequest,
   SendComandaToProductionRequest,
   StartCashClosureRequest,
-  StartComandaCheckoutRequest
+  StartComandaCheckoutRequest,
+  ReopenComandaRequest,
+  RequestComandaCashCheckoutRequest,
+  WaiterServerStatusSnapshot
 } from "./desktop-api.js";
 
 const FALLBACK_BOOTSTRAP = {
@@ -75,6 +82,15 @@ export function createDesktopBridge(api: RayzenDesktopApi | undefined = window.r
     async completeFirstRun(request) {
       return ensureApi(api).setup.completeFirstRun(request);
     },
+    async updateBrandLogo(request) {
+      const desktopApi = ensureApi(api);
+
+      if (typeof desktopApi.setup.updateBrandLogo === "function") {
+        return desktopApi.setup.updateBrandLogo(request);
+      }
+
+      return desktopApi.setup.getStatus();
+    },
     async login(request: AuthLoginRequest) {
       return ensureApi(api).auth.login(request);
     },
@@ -97,6 +113,9 @@ export function createDesktopBridge(api: RayzenDesktopApi | undefined = window.r
     },
     async getCatalogProduct(request: CatalogGetProductRequest): Promise<CatalogProduct | null> {
       return ensureApi(api).catalog.getProduct(request);
+    },
+    async upsertCatalogProduct(request: CatalogUpsertProductRequest): Promise<CatalogProduct> {
+      return ensureApi(api).catalog.upsertProduct(request);
     },
     async getFiscalStatus() {
       return ensureApi(api).fiscal.getStatus();
@@ -130,6 +149,8 @@ export function createDesktopBridge(api: RayzenDesktopApi | undefined = window.r
         return {
           comanda: {
             currentComanda: null,
+            activeComandas: [],
+            mesaGroups: [],
             auditTrail: [],
             lastPreContaSnapshot: null
           },
@@ -142,6 +163,9 @@ export function createDesktopBridge(api: RayzenDesktopApi | undefined = window.r
       }
 
       return api.pdv.getOperationalSnapshot();
+    },
+    async getComandaWorkspace(request: GetComandaWorkspaceRequest): Promise<ComandaWorkspaceSnapshot> {
+      return ensureApi(api).pdv.getComandaWorkspace(request);
     },
     async openComanda(request: OpenComandaRequest): Promise<ComandaWorkspaceSnapshot> {
       return ensureApi(api).pdv.openComanda(request);
@@ -157,6 +181,12 @@ export function createDesktopBridge(api: RayzenDesktopApi | undefined = window.r
     },
     async startComandaCheckout(request: StartComandaCheckoutRequest): Promise<ComandaWorkspaceSnapshot> {
       return ensureApi(api).pdv.startComandaCheckout(request);
+    },
+    async reopenComanda(request: ReopenComandaRequest): Promise<ComandaWorkspaceSnapshot> {
+      return ensureApi(api).pdv.reopenComanda(request);
+    },
+    async requestComandaCashCheckout(request: RequestComandaCashCheckoutRequest): Promise<ComandaWorkspaceSnapshot> {
+      return ensureApi(api).pdv.requestComandaCashCheckout(request);
     },
     async confirmComandaPayment(request: ConfirmComandaPaymentRequest): Promise<OperationalSnapshot> {
       return ensureApi(api).pdv.confirmComandaPayment(request);
@@ -187,6 +217,22 @@ export function createDesktopBridge(api: RayzenDesktopApi | undefined = window.r
     },
     async exportCashAudit(): Promise<CashWorkspaceSnapshot> {
       return ensureApi(api).pdv.exportCashAudit();
+    },
+    async listOperators(): Promise<OperatorSnapshot[]> {
+      if (!api) {
+        return [];
+      }
+
+      return api.team.listOperators();
+    },
+    async saveOperator(request: SaveOperatorRequest): Promise<OperatorSnapshot> {
+      return ensureApi(api).team.saveOperator(request);
+    },
+    async getWaiterStatus(): Promise<WaiterServerStatusSnapshot | null> {
+      if (!api?.waiter) {
+        return null;
+      }
+      return api.waiter.getStatus();
     }
   };
 }

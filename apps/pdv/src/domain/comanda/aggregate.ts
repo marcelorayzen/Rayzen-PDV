@@ -16,6 +16,8 @@ import type {
   PreContaSnapshot,
   PreContaSnapshotItem,
   ProductionBatch,
+  ReopenComandaInput,
+  RequestComandaCashCheckoutInput,
   SendToProductionInput
 } from "./types.js";
 
@@ -28,6 +30,7 @@ export function openComanda(input: OpenComandaInput): ComandaMutationResult {
     numero: input.numero.trim(),
     mesaId: normalizeNullable(input.mesaId),
     atendimentoRef: normalizeNullable(input.atendimentoRef),
+    cashCheckoutRequestedAt: null,
     status: "ABERTA",
     openedAt: input.openedAt,
     currentOwnerUserId: normalizeNullable(input.currentOwnerUserId),
@@ -273,6 +276,7 @@ export function generateComandaPreConta(
   return {
     comanda: {
       ...comanda,
+      cashCheckoutRequestedAt: null,
       status: "EM_PAGAMENTO",
       preContas: [...comanda.preContas, preContaSnapshot]
     },
@@ -292,6 +296,38 @@ export function generateComandaPreConta(
       })
     ],
     preContaSnapshot
+  };
+}
+
+export function requestComandaCashCheckout(
+  comanda: ComandaAggregate,
+  input: RequestComandaCashCheckoutInput
+): ComandaMutationResult {
+  assertComandaInvariant(
+    comanda.status === "EM_PAGAMENTO",
+    "CAIXA_FILA_TRANSICAO_INVALIDA",
+    "Encaminhar ao caixa exige comanda em EM_PAGAMENTO."
+  );
+
+  return {
+    comanda: {
+      ...comanda,
+      cashCheckoutRequestedAt: input.occurredAt
+    },
+    auditEvents: [
+      createAuditEvent({
+        eventId: input.auditEventId,
+        entity: "COMANDA",
+        entityId: comanda.comandaId,
+        action: "COMANDA_ENCAMINHADA_CAIXA",
+        actor: input.actor,
+        at: input.occurredAt,
+        payload: {
+          numero: comanda.numero,
+          mesaId: comanda.mesaId
+        }
+      })
+    ]
   };
 }
 
@@ -332,6 +368,7 @@ export function checkoutComanda(
 
   const nextComanda = {
     ...comanda,
+    cashCheckoutRequestedAt: null,
     status: "ENCERRADA" as const,
     closedAt: input.occurredAt,
     payments: [...comanda.payments, ...payments]
@@ -364,6 +401,39 @@ export function checkoutComanda(
   };
 }
 
+export function reopenComanda(
+  comanda: ComandaAggregate,
+  input: ReopenComandaInput
+): ComandaMutationResult {
+  assertComandaInvariant(
+    comanda.status === "EM_PAGAMENTO",
+    "COMANDA_REABERTURA_INVALIDA",
+    "Somente comandas EM_PAGAMENTO podem ser reabertas."
+  );
+
+  return {
+    comanda: {
+      ...comanda,
+      cashCheckoutRequestedAt: null,
+      status: "EM_PRODUCAO"
+    },
+    auditEvents: [
+      createAuditEvent({
+        eventId: input.auditEventId,
+        entity: "COMANDA",
+        entityId: comanda.comandaId,
+        action: "COMANDA_REABERTA",
+        actor: input.actor,
+        at: input.occurredAt,
+        payload: {
+          numero: comanda.numero,
+          previousPreContaCount: comanda.preContas.length
+        }
+      })
+    ]
+  };
+}
+
 export function cancelComanda(
   comanda: ComandaAggregate,
   input: CancelComandaInput
@@ -384,6 +454,7 @@ export function cancelComanda(
   return {
     comanda: {
       ...comanda,
+      cashCheckoutRequestedAt: null,
       status: "CANCELADA",
       cancelledAt: input.occurredAt,
       cancellationReason: reason,

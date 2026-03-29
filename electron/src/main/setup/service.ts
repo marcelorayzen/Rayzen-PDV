@@ -7,7 +7,8 @@ import {
 
 import type {
   CompleteFirstRunRequest,
-  InstallationStatusSnapshot
+  InstallationStatusSnapshot,
+  UpdateBrandLogoRequest
 } from "../../contracts/ipc.js";
 import type { MainProcessLogStore } from "../log-store.js";
 import type { MainProcessPaths } from "../paths.js";
@@ -20,6 +21,7 @@ interface RuntimeConfigFile {
     legalName: string;
     tradeName: string | null;
     document: string | null;
+    logoFilePath?: string | null;
   } | null;
   printers: {
     cozinha: string;
@@ -83,6 +85,7 @@ export class FirstRunSetupService {
     const legalName = request.companyLegalName.trim();
     const tradeName = normalizeOptionalText(request.companyTradeName);
     const document = normalizeOptionalText(request.companyDocument);
+    const logoFilePath = normalizeOptionalText(request.companyLogoFilePath);
     const cozinhaPrinter = request.printers.cozinha.trim();
     const barPrinter = request.printers.bar.trim();
     const caixaPrinter = request.printers.caixa.trim();
@@ -129,6 +132,7 @@ export class FirstRunSetupService {
           companyLegalName: legalName,
           companyTradeName: tradeName,
           companyDocument: document,
+          companyLogoFilePath: logoFilePath,
           printers: {
             cozinha: cozinhaPrinter,
             bar: barPrinter,
@@ -149,7 +153,8 @@ export class FirstRunSetupService {
       company: {
         legalName,
         tradeName,
-        document
+        document,
+        logoFilePath
       },
       printers: {
         cozinha: cozinhaPrinter,
@@ -165,6 +170,32 @@ export class FirstRunSetupService {
     this.#logger.info("electron.setup.first-run-completed", {
       configFilePath: this.#paths.runtimeConfigFilePath,
       companyLegalName: legalName
+    });
+
+    return this.getStatus();
+  }
+
+  updateBrandLogo(request: UpdateBrandLogoRequest): InstallationStatusSnapshot {
+    const config = this.#readConfig();
+
+    if (!config?.company) {
+      throw new Error("Conclua o first-run antes de configurar a marca do terminal.");
+    }
+
+    const logoFilePath = normalizeOptionalText(request.companyLogoFilePath);
+    const nextConfig: RuntimeConfigFile = {
+      ...config,
+      company: {
+        ...config.company,
+        logoFilePath
+      },
+      updatedAt: request.occurredAt
+    };
+
+    this.#writeConfig(nextConfig);
+    this.#logger.info("electron.setup.brand-logo-updated", {
+      configFilePath: this.#paths.runtimeConfigFilePath,
+      logoConfigured: logoFilePath != null
     });
 
     return this.getStatus();

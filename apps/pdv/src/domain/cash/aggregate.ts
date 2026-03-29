@@ -1,6 +1,5 @@
 import { assertCashInvariant } from "./errors.js";
 import type {
-  CashActor,
   CashAuditEvent,
   CashAuditExport,
   CashClosureSummary,

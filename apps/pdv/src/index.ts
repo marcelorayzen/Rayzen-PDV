@@ -46,6 +46,8 @@ export {
   sanitizePinInput,
   openCashSession,
   openComanda,
+  reopenComanda,
+  requestComandaCashCheckout,
   receiveCashPayment,
   registerCashSupply,
   registerCashWithdrawal,

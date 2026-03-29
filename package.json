@@ -26,7 +26,7 @@
     "test:validate:cash": "node ./scripts/run-cash-validation.mjs",
     "qa:homolog": "node ./scripts/run-qa-release-profile.mjs homolog",
     "qa:pilot": "node ./scripts/run-qa-release-profile.mjs pilot",
-    "lint": "node ./scripts/placeholder-task.mjs lint",
+    "lint": "eslint \"apps/pdv/src/**/*.ts\" \"electron/src/**/*.ts\" \"packages/*/src/**/*.ts\" --max-warnings 0",
     "clean": "tsc -b tsconfig.json --clean",
     "package:win": "pnpm build && pnpm --filter @rayzen/electron package:win",
     "make:win": "pnpm build && pnpm --filter @rayzen/electron make:win",
@@ -37,10 +37,13 @@
     "@electron-forge/cli": "^7.11.1",
     "@electron-forge/maker-squirrel": "^7.11.1",
     "@electron-forge/maker-zip": "^7.11.1",
+    "@eslint/js": "^10.0.1",
     "@jest/globals": "^30.3.0",
     "@types/node": "22.15.29",
     "electron": "^41.0.0",
+    "eslint": "^10.1.0",
     "jest": "^30.3.0",
-    "typescript": "5.8.3"
+    "typescript": "5.8.3",
+    "typescript-eslint": "^8.57.2"
   }
 }

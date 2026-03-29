@@ -41,6 +41,7 @@ export interface InstallationStatusSnapshot {
     legalName: string;
     tradeName: string | null;
     document: string | null;
+    logoFilePath?: string | null;
   } | null;
   printRoutes: Array<{
     setor: string;
@@ -57,6 +58,7 @@ export interface CompleteFirstRunRequest {
   companyLegalName: string;
   companyTradeName?: string | null;
   companyDocument?: string | null;
+  companyLogoFilePath?: string | null;
   printers: {
     cozinha: string;
     bar: string;
@@ -65,10 +67,28 @@ export interface CompleteFirstRunRequest {
   occurredAt: string;
 }
 
+export interface UpdateBrandLogoRequest {
+  companyLogoFilePath?: string | null;
+  occurredAt: string;
+}
+
 export interface ComandaWorkspaceSnapshot {
   currentComanda: ComandaAggregate | null;
+  activeComandas: ComandaAggregate[];
+  mesaGroups: ComandaMesaGroupSnapshot[];
   auditTrail: ComandaAuditEvent[];
   lastPreContaSnapshot: PreContaSnapshot | null;
+}
+
+export interface ComandaMesaGroupSnapshot {
+  mesaId: string | null;
+  comandas: ComandaAggregate[];
+  comandaCount: number;
+  itemCount: number;
+  totalAmountCents: number;
+  paidAmountCents: number;
+  dueAmountCents: number;
+  statuses: ComandaAggregate["status"][];
 }
 
 export interface CashWorkspaceSnapshot {
@@ -100,6 +120,19 @@ export type CatalogProductSnapshot = CatalogProduct;
 
 export interface CatalogGetProductRequest {
   productId: string;
+}
+
+export interface CatalogUpsertProductRequest {
+  nome: string;
+  categoria: string;
+  setor: string;
+  precoCents: number;
+  shortcutHint: string;
+  productId?: string | null;
+}
+
+export interface GetComandaWorkspaceRequest {
+  comandaId: string;
 }
 
 export interface FiscalDocumentSnapshot {
@@ -290,6 +323,16 @@ export interface StartComandaCheckoutRequest {
   actor: ComandaActor;
 }
 
+export interface ReopenComandaRequest {
+  comandaId: string;
+  actor: ComandaActor;
+}
+
+export interface RequestComandaCashCheckoutRequest {
+  comandaId: string;
+  actor: ComandaActor;
+}
+
 export interface ConfirmComandaPaymentRequest {
   comandaId: string;
   paymentMethod: ComandaPaymentMethod;
@@ -336,6 +379,26 @@ export interface CloseCashSessionRequest {
   actor: ComandaActor;
 }
 
+import type { OperatorRecord } from "../domain/shell-state.js";
+
+export type OperatorSnapshot = OperatorRecord;
+
+export interface SaveOperatorRequest {
+  operatorId?: string | null;
+  operatorCode: string;
+  nome: string;
+  pin: string;
+  role: "GERENTE" | "CAIXA" | "GARCOM";
+  ativo: boolean;
+}
+
+export interface WaiterServerStatusSnapshot {
+  running: boolean;
+  port: number;
+  localIp: string | null;
+  url: string | null;
+}
+
 export interface RayzenDesktopApi {
   system: {
     getBootstrap(): Promise<MainBootstrapSnapshot>;
@@ -344,6 +407,7 @@ export interface RayzenDesktopApi {
   setup: {
     getStatus(): Promise<InstallationStatusSnapshot>;
     completeFirstRun(request: CompleteFirstRunRequest): Promise<InstallationStatusSnapshot>;
+    updateBrandLogo(request: UpdateBrandLogoRequest): Promise<InstallationStatusSnapshot>;
   };
   auth: {
     login(request: AuthLoginRequest): Promise<AuthLoginResult>;
@@ -353,6 +417,7 @@ export interface RayzenDesktopApi {
   catalog: {
     listProducts(): Promise<CatalogProductSnapshot[]>;
     getProduct(request: CatalogGetProductRequest): Promise<CatalogProductSnapshot | null>;
+    upsertProduct(request: CatalogUpsertProductRequest): Promise<CatalogProductSnapshot>;
   };
   fiscal: {
     getStatus(): Promise<FiscalStatusSnapshot>;
@@ -369,11 +434,14 @@ export interface RayzenDesktopApi {
   };
   pdv: {
     getOperationalSnapshot(): Promise<OperationalSnapshot>;
+    getComandaWorkspace(request: GetComandaWorkspaceRequest): Promise<ComandaWorkspaceSnapshot>;
     openComanda(request: OpenComandaRequest): Promise<ComandaWorkspaceSnapshot>;
     addComandaItem(request: AddComandaItemRequest): Promise<ComandaWorkspaceSnapshot>;
     cancelComandaItem(request: CancelComandaItemRequest): Promise<ComandaWorkspaceSnapshot>;
     sendComandaToProduction(request: SendComandaToProductionRequest): Promise<ComandaWorkspaceSnapshot>;
     startComandaCheckout(request: StartComandaCheckoutRequest): Promise<ComandaWorkspaceSnapshot>;
+    reopenComanda(request: ReopenComandaRequest): Promise<ComandaWorkspaceSnapshot>;
+    requestComandaCashCheckout(request: RequestComandaCashCheckoutRequest): Promise<ComandaWorkspaceSnapshot>;
     confirmComandaPayment(request: ConfirmComandaPaymentRequest): Promise<OperationalSnapshot>;
     openCashSession(request: OpenCashSessionRequest): Promise<CashWorkspaceSnapshot>;
     registerCashReceipt(request: RegisterCashMovementRequest): Promise<CashWorkspaceSnapshot>;
@@ -390,5 +458,12 @@ export interface RayzenDesktopApi {
     suprimento(request: RegisterCashSupplyRequest): Promise<CashWorkspaceSnapshot>;
     fechar(request: CloseCashSessionRequest): Promise<CashWorkspaceSnapshot>;
     resumo(): Promise<CashSummarySnapshot>;
+  };
+  team: {
+    listOperators(): Promise<OperatorSnapshot[]>;
+    saveOperator(request: SaveOperatorRequest): Promise<OperatorSnapshot>;
+  };
+  waiter: {
+    getStatus(): Promise<WaiterServerStatusSnapshot>;
   };
 }

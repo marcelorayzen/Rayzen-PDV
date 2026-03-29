@@ -39,11 +39,14 @@ export {
 } from "./shell-state.js";
 export type { CatalogProduct } from "./catalog.js";
 export type {
+  CatalogDraftState,
+  OperatorRecord,
   RendererBootstrapStatus,
   RendererHealthStatus,
   RuntimeSnapshot,
   ShellEvent,
-  ShellState
+  ShellState,
+  TeamWorkspaceState
 } from "./shell-state.js";
 export {
   addComandaItem,
@@ -53,6 +56,8 @@ export {
   checkoutComanda,
   generateComandaPreConta,
   openComanda,
+  reopenComanda,
+  requestComandaCashCheckout,
   sendComandaToProduction,
   ComandaDomainError
 } from "./comanda/index.js";
@@ -77,6 +82,8 @@ export type {
   OpenComandaInput,
   PreContaSnapshot,
   ProductionBatch,
+  ReopenComandaInput,
+  RequestComandaCashCheckoutInput,
   SendToProductionInput
 } from "./comanda/index.js";
 export {

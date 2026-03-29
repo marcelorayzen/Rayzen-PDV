@@ -183,6 +183,21 @@ export class ComandaRepository {
     return row ? this.findById(row.comandaId) : null;
   }
 
+  listActive(): PersistedComandaAggregate[] {
+    const rows = this.#db.prepare(
+      `
+        SELECT comanda_id AS comandaId
+        FROM comandas
+        WHERE status NOT IN ('ENCERRADA', 'CANCELADA')
+        ORDER BY updated_at DESC, opened_at DESC, comanda_id DESC
+      `
+    ).all() as { comandaId: string }[];
+
+    return rows
+      .map((row) => this.findById(row.comandaId))
+      .filter((aggregate): aggregate is PersistedComandaAggregate => aggregate !== null);
+  }
+
   findLatestActiveByNumero(numero: string): PersistedComandaAggregate | null {
     const row = this.#db.prepare(
       `

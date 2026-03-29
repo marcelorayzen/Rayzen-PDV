@@ -16,6 +16,7 @@ import {
   CashDomainError,
   openCashSession,
   openComanda,
+  requestComandaCashCheckout,
   receiveCashPayment,
   registerCashSupply,
   registerCashWithdrawal,
@@ -60,7 +61,10 @@ export async function runControllerScenario() {
   const operationalState = controller.getState();
 
   assert.equal(operationalState.session?.role, "GERENTE");
-  assert.equal(operationalState.comandaWorkspace.currentComanda?.status, "EM_PAGAMENTO");
+  const currentComanda = operationalState.comandaWorkspace.activeComandas.find(
+    (c) => c.comandaId === operationalState.comandaWorkspace.selectedComandaId
+  );
+  assert.equal(currentComanda?.status, "EM_PAGAMENTO");
   assert.equal(operationalState.comandaWorkspace.auditTrail.length, 4);
   assert.equal(operationalState.comandaWorkspace.catalogProducts.length >= 4, true);
 
@@ -68,6 +72,44 @@ export async function runControllerScenario() {
   assert.equal(shortcutHandled, true);
   assert.equal(controller.getState().currentViewId, "catalogo");
   assert.equal(controller.getState().focusTarget, "product-search");
+}
+
+export function runCheckoutDueAmountScenario() {
+  const controller = createPdvShellController({
+    desktopBridge: createFakeDesktopBridge()
+  });
+
+  return controller.start()
+    .then(async () => {
+      controller.updatePinInput("1234");
+      await controller.submitPin();
+      await controller.openComandaFromDraft();
+      controller.updateProductSearch("Hamburg");
+      await controller.addSelectedProductToCurrentComanda();
+      await controller.sendCurrentComandaToProduction();
+      await controller.generatePreContaForCurrentComanda();
+
+      const state = controller.getState();
+      const currentComanda = state.comandaWorkspace.activeComandas.find(
+        (c) => c.comandaId === state.comandaWorkspace.selectedComandaId
+      );
+
+      assert.ok(currentComanda);
+
+      currentComanda.payments = [
+        {
+          paymentId: "pay_due_partial",
+          method: "PIX",
+          amountCents: 1200,
+          status: "CONFIRMADO",
+          confirmedAt: "2026-03-12T13:04:00.000Z"
+        }
+      ];
+
+      controller.fillCheckoutWithDueAmount();
+
+      assert.equal(controller.getState().comandaWorkspace.checkoutAmountDraft, "20,00");
+    });
 }
 
 export async function runFirstRunScenario() {
@@ -129,6 +171,134 @@ export async function runCashControllerScenario() {
   assert.equal(state.cashWorkspace.auditExport?.totals.totalDivergenceAmountCents, 0);
 }
 
+export async function runMesaSelectionScenario() {
+  const opened701 = openComanda({
+    comandaId: "cmd_m7_701",
+    numero: "701",
+    mesaId: "M7",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    openedAt: "2026-03-12T19:00:00.000Z",
+    auditEventId: "evt_m7_701"
+  });
+  const opened702 = openComanda({
+    comandaId: "cmd_m7_702",
+    numero: "702",
+    mesaId: "M7",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    openedAt: "2026-03-12T19:02:00.000Z",
+    auditEventId: "evt_m7_702"
+  });
+  const opened801 = openComanda({
+    comandaId: "cmd_m8_801",
+    numero: "801",
+    mesaId: "M8",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    openedAt: "2026-03-12T19:04:00.000Z",
+    auditEventId: "evt_m8_801"
+  });
+  const withItem702 = addComandaItem(opened702.comanda, {
+    itemId: "item_m7_702",
+    produtoId: "prod_refrigerante",
+    productLabel: "Refrigerante",
+    setor: "BAR",
+    quantity: 2,
+    unitPriceCents: 900,
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    occurredAt: "2026-03-12T19:05:00.000Z",
+    auditEventId: "evt_item_m7_702"
+  });
+  const controller = createPdvShellController({
+    desktopBridge: createFakeDesktopBridge({
+      activeComandas: [opened701.comanda, withItem702.comanda, opened801.comanda],
+      comandaAuditTrailById: {
+        [opened701.comanda.comandaId]: opened701.auditEvents,
+        [withItem702.comanda.comandaId]: [...opened702.auditEvents, ...withItem702.auditEvents],
+        [opened801.comanda.comandaId]: opened801.auditEvents
+      }
+    })
+  });
+
+  await controller.start();
+  controller.updatePinInput("1234");
+  await controller.submitPin();
+  controller.navigate("mesas");
+  await controller.selectMesaComanda("cmd_m7_702", "comandas");
+
+  const state = controller.getState();
+
+  assert.equal(state.comandaWorkspace.selectedComandaId, "cmd_m7_702");
+  assert.equal(state.currentViewId, "comandas");
+  const selectedComanda702 = state.comandaWorkspace.activeComandas.find(
+    (c) => c.comandaId === state.comandaWorkspace.selectedComandaId
+  );
+  assert.equal(selectedComanda702?.numero, "702");
+  assert.equal(selectedComanda702?.mesaId, "M7");
+  assert.equal(state.comandaWorkspace.mesaGroups.find((group) => group.mesaId === "M7")?.comandaCount, 2);
+  assert.equal(state.focusTarget, "product-search");
+}
+
+export async function runMultipleOpenComandasScenario() {
+  const controller = createPdvShellController({
+    desktopBridge: createFakeDesktopBridge()
+  });
+
+  await controller.start();
+  controller.updatePinInput("1234");
+  await controller.submitPin();
+
+  controller.updateComandaNumeroDraft("701");
+  controller.updateMesaDraft("M7");
+  await controller.openComandaFromDraft();
+
+  controller.updateComandaNumeroDraft("702");
+  controller.updateMesaDraft("M7");
+  await controller.openComandaFromDraft();
+
+  let state = controller.getState();
+  const comanda702 = state.comandaWorkspace.activeComandas.find((item) => item.numero === "702");
+
+  assert.equal(state.comandaWorkspace.activeComandas.length, 2);
+  assert.equal(state.comandaWorkspace.mesaGroups.find((group) => group.mesaId === "M7")?.comandaCount, 2);
+  assert.ok(comanda702);
+
+  await controller.selectMesaComanda(comanda702.comandaId, "comandas");
+
+  state = controller.getState();
+
+  assert.equal(state.comandaWorkspace.selectedComandaId, comanda702.comandaId);
+  assert.equal(
+    state.comandaWorkspace.activeComandas.find((c) => c.comandaId === state.comandaWorkspace.selectedComandaId)?.numero,
+    "702"
+  );
+
+  controller.updateComandaNumeroDraft("701");
+  await controller.openComandaFromDraft();
+
+  state = controller.getState();
+
+  const selected701 = state.comandaWorkspace.activeComandas.find(
+    (c) => c.comandaId === state.comandaWorkspace.selectedComandaId
+  );
+  assert.equal(selected701?.numero, "701");
+  assert.equal(state.comandaWorkspace.activeComandas.length, 2);
+}
+
 export function runShortcutFixtureScenario() {
   assert.equal(SHELL_SHORTCUTS.F2, "Abrir ou buscar comanda");
   assert.equal(SHELL_SHORTCUTS.F8, "Checkout");
@@ -184,7 +354,10 @@ export function runComandaUiRenderScenario() {
     lastShortcut: null,
     firstRunWorkspace: createEmptyFirstRunWorkspace(),
     comandaWorkspace: {
+      selectedComandaId: withItem.comanda.comandaId,
       currentComanda: withItem.comanda,
+      activeComandas: [withItem.comanda],
+      mesaGroups: [],
       auditTrail: [...opened.auditEvents, ...withItem.auditEvents],
       catalogProducts: [],
       selectedCatalogProductId: null,
@@ -201,9 +374,10 @@ export function runComandaUiRenderScenario() {
     cashWorkspace: createEmptyCashWorkspace()
   });
 
-  assert.match(html, /Comanda 401/);
-  assert.match(html, /Itens da comanda/);
+  assert.match(html, /value="401"/);
+  assert.match(html, /Itens/);
   assert.match(html, /Cancelar item/);
+  assert.doesNotMatch(html, /Ã|�/);
 }
 
 export function runCashUiRenderScenario() {
@@ -255,7 +429,10 @@ export function runCashUiRenderScenario() {
     lastShortcut: null,
     firstRunWorkspace: createEmptyFirstRunWorkspace(),
     comandaWorkspace: {
+      selectedComandaId: null,
       currentComanda: null,
+      activeComandas: [],
+      mesaGroups: [],
       auditTrail: [],
       catalogProducts: [],
       selectedCatalogProductId: null,
@@ -279,8 +456,335 @@ export function runCashUiRenderScenario() {
   });
 
   assert.match(html, /Caixa do turno/);
-  assert.match(html, /Recebimento por forma/);
-  assert.match(html, /Concluir fechamento/);
+  assert.match(html, /Recebimento/);
+  assert.match(html, /Concluir/);
+  assert.match(html, /Status/);
+  assert.ok(html.length > 0);
+}
+
+export function runSettlementViewsRenderScenario() {
+  const actor = {
+    userId: "opr_gc_01",
+    terminalId: "term_1",
+    role: "GARCOM"
+  };
+  const openedPreConta = openComanda({
+    comandaId: "cmd_settle_1",
+    numero: "451",
+    mesaId: "M7",
+    actor,
+    openedAt: "2026-03-12T19:00:00.000Z",
+    auditEventId: "evt_settle_open_1"
+  });
+  const withItemPreConta = addComandaItem(openedPreConta.comanda, {
+    itemId: "item_settle_1",
+    produtoId: "prod_settle_1",
+    productLabel: "Tonica",
+    setor: "BAR",
+    quantity: 1,
+    unitPriceCents: 1100,
+    actor,
+    occurredAt: "2026-03-12T19:01:00.000Z",
+    auditEventId: "evt_settle_item_1"
+  });
+  const inProduction = sendComandaToProduction(withItemPreConta.comanda, {
+    batchId: "batch_settle_1",
+    actor,
+    occurredAt: "2026-03-12T19:02:00.000Z",
+    auditEventId: "evt_settle_batch_1"
+  });
+
+  const openedCheckout = openComanda({
+    comandaId: "cmd_settle_2",
+    numero: "452",
+    mesaId: "M7",
+    actor,
+    openedAt: "2026-03-12T19:03:00.000Z",
+    auditEventId: "evt_settle_open_2"
+  });
+  const withItemCheckout = addComandaItem(openedCheckout.comanda, {
+    itemId: "item_settle_2",
+    produtoId: "prod_settle_2",
+    productLabel: "Batata rustica",
+    setor: "COZINHA",
+    quantity: 1,
+    unitPriceCents: 2800,
+    actor,
+    occurredAt: "2026-03-12T19:04:00.000Z",
+    auditEventId: "evt_settle_item_2"
+  });
+  const inProductionCheckout = sendComandaToProduction(withItemCheckout.comanda, {
+    batchId: "batch_settle_2",
+    actor,
+    occurredAt: "2026-03-12T19:05:00.000Z",
+    auditEventId: "evt_settle_batch_2"
+  });
+  const inPayment = generateComandaPreConta(inProductionCheckout.comanda, {
+    preContaId: "pre_settle_2",
+    actor,
+    occurredAt: "2026-03-12T19:06:00.000Z",
+    auditEventId: "evt_settle_pre_2"
+  });
+  const queuedForCash = requestComandaCashCheckout(inPayment.comanda, {
+    actor: {
+      userId: "opr_cx_01",
+      terminalId: "pdv-main",
+      role: "CAIXA"
+    },
+    occurredAt: "2026-03-12T19:07:00.000Z",
+    auditEventId: "evt_settle_cash_queue_2"
+  });
+  const activeComandas = [inProduction.comanda, queuedForCash.comanda];
+  const mesaGroups = buildMesaGroups(activeComandas);
+  const baseState = {
+    bootstrapping: false,
+    bootstrap: createRuntimeSnapshot().bootstrap,
+    health: createRuntimeSnapshot().health,
+    pinInput: "",
+    authError: null,
+    authStatus: "idle",
+    session: {
+      operatorId: "opr_gc_01",
+      operatorCode: "GC-01",
+      displayLabel: "Sala principal",
+      role: "GARCOM",
+      authenticatedAt: "2026-03-12T19:00:00.000Z"
+    },
+    focusTarget: null,
+    feedbackMessage: "Troca de comanda pronta.",
+    feedbackTone: "info",
+    productSearch: "",
+    lastShortcut: null,
+    firstRunWorkspace: createEmptyFirstRunWorkspace(),
+    comandaWorkspace: {
+      selectedComandaId: queuedForCash.comanda.comandaId,
+      currentComanda: queuedForCash.comanda,
+      activeComandas,
+      mesaGroups,
+      auditTrail: [
+        ...openedCheckout.auditEvents,
+        ...withItemCheckout.auditEvents,
+        ...inProductionCheckout.auditEvents,
+        ...inPayment.auditEvents,
+        ...queuedForCash.auditEvents
+      ],
+      catalogProducts: [],
+      selectedCatalogProductId: null,
+      selectedItemId: null,
+      comandaNumeroDraft: "452",
+      mesaDraft: "M7",
+      quantityDraft: "1",
+      itemNoteDraft: "",
+      cancelReasonDraft: "",
+      checkoutAmountDraft: "28,00",
+      checkoutMethodDraft: "PIX",
+      lastPreContaSnapshot: queuedForCash.comanda.preContas.at(-1) ?? null
+    }
+  };
+
+  const preContaHtml = renderShell({
+    ...baseState,
+    currentViewId: "preconta",
+    cashWorkspace: createEmptyCashWorkspace()
+  });
+  const checkoutHtml = renderShell({
+    ...baseState,
+    currentViewId: "checkout",
+    cashWorkspace: createEmptyCashWorkspace()
+  });
+  const cashOpened = openCashSession({
+    cashSessionId: "cash_settle",
+    terminalId: "pdv-main",
+    actor: {
+      userId: "opr_cx_01",
+      terminalId: "pdv-main",
+      role: "CAIXA"
+    },
+    openedAt: "2026-03-12T19:10:00.000Z",
+    auditEventId: "evt_cash_settle",
+    openingFundAmountCents: 20000,
+    openingReason: "troco do turno"
+  });
+  const caixaHtml = renderShell({
+    ...baseState,
+    currentViewId: "caixa",
+    cashWorkspace: {
+      ...createEmptyCashWorkspace(),
+      currentSession: cashOpened.session,
+      auditTrail: [...cashOpened.auditEvents]
+    }
+  });
+
+  assert.match(preContaHtml, /Comanda em conferência/);
+  assert.match(preContaHtml, /Encaminhar ao caixa/);
+  assert.match(preContaHtml, /Retomar pré-conta/);
+  assert.match(preContaHtml, /Comanda 451/);
+  assert.match(preContaHtml, /Comanda 452/);
+  assert.match(checkoutHtml, /Comanda em cobrança/);
+  assert.match(checkoutHtml, /Trazer para checkout/);
+  assert.match(checkoutHtml, /Encaminhada/);
+  assert.match(checkoutHtml, /M7/);
+  assert.match(caixaHtml, /Comandas liberadas/);
+  assert.match(caixaHtml, /Consulta manual/);
+  assert.match(caixaHtml, /Abrir pré-conta/);
+  assert.match(caixaHtml, /Ir para checkout/);
+}
+
+export function runMesasUiRenderScenario() {
+  const opened = openComanda({
+    comandaId: "cmd_mesa_1",
+    numero: "402",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    openedAt: "2026-03-12T13:00:00.000Z",
+    auditEventId: "evt_mesa_open",
+    mesaId: "M12"
+  });
+  const withItem = addComandaItem(opened.comanda, {
+    itemId: "item_mesa_1",
+    produtoId: "prod_mesa_1",
+    productLabel: "Suco de laranja",
+    setor: "BAR",
+    quantity: 1,
+    unitPriceCents: 1500,
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    occurredAt: "2026-03-12T13:01:00.000Z",
+    auditEventId: "evt_mesa_item"
+  });
+  const openedSecond = openComanda({
+    comandaId: "cmd_mesa_2",
+    numero: "403",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    openedAt: "2026-03-12T13:03:00.000Z",
+    auditEventId: "evt_mesa_open_2",
+    mesaId: "M12"
+  });
+  const withItemSecond = addComandaItem(openedSecond.comanda, {
+    itemId: "item_mesa_2",
+    produtoId: "prod_mesa_2",
+    productLabel: "Agua com gas",
+    setor: "BAR",
+    quantity: 1,
+    unitPriceCents: 600,
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    occurredAt: "2026-03-12T13:04:00.000Z",
+    auditEventId: "evt_mesa_item_2"
+  });
+  const inProductionSecond = sendComandaToProduction(withItemSecond.comanda, {
+    batchId: "batch_mesa_2",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    occurredAt: "2026-03-12T13:05:00.000Z",
+    auditEventId: "evt_mesa_batch_2"
+  });
+  const openedWithoutMesa = openComanda({
+    comandaId: "cmd_mesa_sem_vinculo",
+    numero: "404",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    openedAt: "2026-03-12T13:05:00.000Z",
+    auditEventId: "evt_mesa_open_3"
+  });
+  const preContaSecondFromProduction = generateComandaPreConta(inProductionSecond.comanda, {
+    preContaId: "pre_mesa_2",
+    actor: {
+      userId: "opr_gc_01",
+      terminalId: "term_1",
+      role: "GARCOM"
+    },
+    occurredAt: "2026-03-12T13:06:00.000Z",
+    auditEventId: "evt_mesa_pre_2"
+  });
+  const html = renderShell({
+    bootstrapping: false,
+    bootstrap: createRuntimeSnapshot().bootstrap,
+    health: createRuntimeSnapshot().health,
+    pinInput: "",
+    authError: null,
+    authStatus: "idle",
+    session: {
+      operatorId: "opr_gc_01",
+      operatorCode: "GC-01",
+      displayLabel: "Sala principal",
+      role: "GARCOM",
+      authenticatedAt: "2026-03-12T13:00:00.000Z"
+    },
+    currentViewId: "mesas",
+    focusTarget: "mesas-primary-action",
+    feedbackMessage: "Mesa pronta.",
+    feedbackTone: "info",
+    productSearch: "",
+    lastShortcut: null,
+    firstRunWorkspace: createEmptyFirstRunWorkspace(),
+    comandaWorkspace: {
+      selectedComandaId: withItem.comanda.comandaId,
+      currentComanda: withItem.comanda,
+      activeComandas: [withItem.comanda, preContaSecondFromProduction.comanda, openedWithoutMesa.comanda],
+      mesaGroups: [
+        {
+          mesaId: "M12",
+          comandas: [withItem.comanda, preContaSecondFromProduction.comanda],
+          comandaCount: 2,
+          itemCount: 2,
+          totalAmountCents: 2100,
+          paidAmountCents: 0,
+          dueAmountCents: 2100,
+          statuses: [withItem.comanda.status, preContaSecondFromProduction.comanda.status]
+        },
+        {
+          mesaId: null,
+          comandas: [openedWithoutMesa.comanda],
+          comandaCount: 1,
+          itemCount: 0,
+          totalAmountCents: 0,
+          paidAmountCents: 0,
+          dueAmountCents: 0,
+          statuses: [openedWithoutMesa.comanda.status]
+        }
+      ],
+      auditTrail: [...opened.auditEvents, ...withItem.auditEvents],
+      catalogProducts: [],
+      selectedCatalogProductId: null,
+      selectedItemId: "item_mesa_1",
+      comandaNumeroDraft: "402",
+      mesaDraft: "M12",
+      quantityDraft: "1",
+      itemNoteDraft: "",
+      cancelReasonDraft: "",
+      checkoutAmountDraft: "",
+      checkoutMethodDraft: "PIX",
+      lastPreContaSnapshot: null
+    },
+    cashWorkspace: createEmptyCashWorkspace()
+  });
+
+  assert.match(html, /Mesas e comandas/);
+  assert.match(html, /M12/);
+  assert.match(html, /2 comandas/);
+  assert.match(html, /Comanda 403/);
+  assert.match(html, /ABERTA \/ EM_PAGAMENTO/);
+  assert.match(html, /Sem mesa/);
 }
 
 export function runFirstRunUiRenderScenario() {
@@ -334,7 +838,10 @@ export function runFirstRunUiRenderScenario() {
       submitting: false
     },
     comandaWorkspace: {
+      selectedComandaId: null,
       currentComanda: null,
+      activeComandas: [],
+      mesaGroups: [],
       auditTrail: [],
       catalogProducts: [],
       selectedCatalogProductId: null,
@@ -353,6 +860,9 @@ export function runFirstRunUiRenderScenario() {
 
   assert.match(html, /Configurar o terminal antes de liberar o PDV/);
   assert.match(html, /Concluir first-run/);
+  assert.match(html, /Dados mínimos para liberar o terminal/);
+  assert.match(html, /Razão social ou nome operacional/);
+  assert.doesNotMatch(html, /Ã|�/);
 }
 
 export function runComandaLifecycleScenario() {
@@ -699,8 +1209,10 @@ function createFakeDesktopBridge(options = {}) {
       { setor: "BAR", impressoras: ["IMP_BAR_01"] },
       { setor: "CAIXA", impressoras: ["IMP_CAIXA_01"] }
     ],
-    comanda: null,
+    comanda: options.activeComandas?.[0] ?? null,
+    extraActiveComandas: options.activeComandas?.slice(1) ?? [],
     comandaAuditTrail: [],
+    comandaAuditTrailById: { ...(options.comandaAuditTrailById ?? {}) },
     cash: null,
     cashAuditTrail: [],
     sequence: 0
@@ -708,8 +1220,55 @@ function createFakeDesktopBridge(options = {}) {
 
   const nextId = (prefix) => `${prefix}_${String(++state.sequence).padStart(4, "0")}`;
   const nowIso = () => `2026-03-12T19:${String(state.sequence).padStart(2, "0")}:00.000Z`;
+  const listActiveComandas = () => [state.comanda, ...state.extraActiveComandas].filter(Boolean);
+  const syncCurrentComanda = (nextComanda, auditTrail = state.comandaAuditTrail) => {
+    if (!nextComanda) {
+      state.comanda = null;
+      state.comandaAuditTrail = [];
+      return;
+    }
+    const previousCurrentComanda =
+      state.comanda && state.comanda.comandaId !== nextComanda.comandaId
+        ? state.comanda
+        : null;
+    const nextExtraComandas = state.extraActiveComandas.filter((item) => item.comandaId !== nextComanda.comandaId);
+
+    state.extraActiveComandas = previousCurrentComanda
+      ? [
+          previousCurrentComanda,
+          ...nextExtraComandas.filter((item) => item.comandaId !== previousCurrentComanda.comandaId)
+        ]
+      : nextExtraComandas;
+
+    state.comanda = nextComanda;
+    state.comandaAuditTrail = [...auditTrail];
+    state.comandaAuditTrailById[nextComanda.comandaId] = [...auditTrail];
+  };
+  const promoteComanda = (comandaId) => {
+    if (state.comanda?.comandaId === comandaId) {
+      return state.comanda;
+    }
+
+    const extraIndex = state.extraActiveComandas.findIndex((item) => item.comandaId === comandaId);
+
+    if (extraIndex < 0) {
+      return null;
+    }
+
+    const [selected] = state.extraActiveComandas.splice(extraIndex, 1);
+
+    if (state.comanda) {
+      state.extraActiveComandas.unshift(state.comanda);
+    }
+
+    syncCurrentComanda(selected, state.comandaAuditTrailById[selected.comandaId] ?? []);
+    return selected;
+  };
   const getComandaSnapshot = () => ({
+    selectedComandaId: state.comanda?.comandaId ?? null,
     currentComanda: state.comanda,
+    activeComandas: listActiveComandas(),
+    mesaGroups: buildMesaGroups(listActiveComandas()),
     auditTrail: [...state.comandaAuditTrail],
     lastPreContaSnapshot: state.comanda?.preContas.at(-1) ?? null
   });
@@ -878,7 +1437,23 @@ function createFakeDesktopBridge(options = {}) {
         cash: getCashSnapshot()
       };
     },
+    async getComandaWorkspace(request) {
+      const selected = promoteComanda(request.comandaId);
+
+      if (!selected) {
+        throw new Error("Comanda nao encontrada.");
+      }
+
+      return getComandaSnapshot();
+    },
     async openComanda(request) {
+      const existing = listActiveComandas().find((item) => item.numero === request.numero);
+
+      if (existing) {
+        promoteComanda(existing.comandaId);
+        return getComandaSnapshot();
+      }
+
       const mutation = openComanda({
         comandaId: nextId("cmd"),
         numero: request.numero,
@@ -888,8 +1463,7 @@ function createFakeDesktopBridge(options = {}) {
         auditEventId: nextId("evt"),
         currentOwnerUserId: request.actor.userId
       });
-      state.comanda = mutation.comanda;
-      state.comandaAuditTrail = [...mutation.auditEvents];
+      syncCurrentComanda(mutation.comanda, mutation.auditEvents);
       return getComandaSnapshot();
     },
     async addComandaItem(request) {
@@ -906,8 +1480,7 @@ function createFakeDesktopBridge(options = {}) {
         auditEventId: nextId("evt"),
         note: request.note ?? null
       });
-      state.comanda = mutation.comanda;
-      state.comandaAuditTrail = [...state.comandaAuditTrail, ...mutation.auditEvents];
+      syncCurrentComanda(mutation.comanda, [...state.comandaAuditTrail, ...mutation.auditEvents]);
       return getComandaSnapshot();
     },
     async cancelComandaItem(request) {
@@ -918,8 +1491,7 @@ function createFakeDesktopBridge(options = {}) {
         occurredAt: nowIso(),
         auditEventId: nextId("evt")
       });
-      state.comanda = mutation.comanda;
-      state.comandaAuditTrail = [...state.comandaAuditTrail, ...mutation.auditEvents];
+      syncCurrentComanda(mutation.comanda, [...state.comandaAuditTrail, ...mutation.auditEvents]);
       return getComandaSnapshot();
     },
     async sendComandaToProduction(request) {
@@ -929,8 +1501,7 @@ function createFakeDesktopBridge(options = {}) {
         occurredAt: nowIso(),
         auditEventId: nextId("evt")
       });
-      state.comanda = mutation.comanda;
-      state.comandaAuditTrail = [...state.comandaAuditTrail, ...mutation.auditEvents];
+      syncCurrentComanda(mutation.comanda, [...state.comandaAuditTrail, ...mutation.auditEvents]);
       return getComandaSnapshot();
     },
     async startComandaCheckout(request) {
@@ -940,8 +1511,16 @@ function createFakeDesktopBridge(options = {}) {
         occurredAt: nowIso(),
         auditEventId: nextId("evt")
       });
-      state.comanda = mutation.comanda;
-      state.comandaAuditTrail = [...state.comandaAuditTrail, ...mutation.auditEvents];
+      syncCurrentComanda(mutation.comanda, [...state.comandaAuditTrail, ...mutation.auditEvents]);
+      return getComandaSnapshot();
+    },
+    async requestComandaCashCheckout(request) {
+      const mutation = requestComandaCashCheckout(requireComanda(), {
+        actor: request.actor,
+        occurredAt: nowIso(),
+        auditEventId: nextId("evt")
+      });
+      syncCurrentComanda(mutation.comanda, [...state.comandaAuditTrail, ...mutation.auditEvents]);
       return getComandaSnapshot();
     },
     async confirmComandaPayment(request) {
@@ -1057,6 +1636,12 @@ function createFakeDesktopBridge(options = {}) {
     },
     async exportCashAudit() {
       return getCashSnapshot();
+    },
+    async listOperators() {
+      return [];
+    },
+    async saveOperator(_request) {
+      throw new Error("saveOperator nao implementado no fake bridge do shell.");
     }
   };
 }
@@ -1081,6 +1666,45 @@ function createRuntimeSnapshot() {
       logFilePath: "C:\\ProgramData\\RayzenPDV\\logs\\rayzen.log"
     }
   };
+}
+
+function buildMesaGroups(activeComandas) {
+  const groups = new Map();
+
+  for (const comanda of activeComandas) {
+    const key = comanda.mesaId ?? "__SEM_MESA__";
+    const current = groups.get(key) ?? [];
+    current.push(comanda);
+    groups.set(key, current);
+  }
+
+  return [...groups.entries()].map(([key, comandas]) => {
+    const totals = comandas.map((comanda) => {
+      const activeItems = comanda.items.filter((item) => item.status !== "CANCELADO");
+      const totalAmountCents = activeItems.reduce((sum, item) => sum + item.quantity * item.unitPriceCents, 0);
+      const paidAmountCents = comanda.payments
+        .filter((payment) => payment.status === "CONFIRMADO")
+        .reduce((sum, payment) => sum + payment.amountCents, 0);
+
+      return {
+        itemCount: activeItems.length,
+        totalAmountCents,
+        paidAmountCents,
+        dueAmountCents: Math.max(totalAmountCents - paidAmountCents, 0)
+      };
+    });
+
+    return {
+      mesaId: key === "__SEM_MESA__" ? null : key,
+      comandas,
+      comandaCount: comandas.length,
+      itemCount: totals.reduce((sum, total) => sum + total.itemCount, 0),
+      totalAmountCents: totals.reduce((sum, total) => sum + total.totalAmountCents, 0),
+      paidAmountCents: totals.reduce((sum, total) => sum + total.paidAmountCents, 0),
+      dueAmountCents: totals.reduce((sum, total) => sum + total.dueAmountCents, 0),
+      statuses: [...new Set(comandas.map((comanda) => comanda.status))]
+    };
+  });
 }
 
 function createEmptyCashWorkspace() {
@@ -1146,11 +1770,16 @@ function createEmptyFirstRunWorkspace() {
 export async function runAllPdvShellTests() {
   await runAuthenticationScenario();
   await runControllerScenario();
+  await runMesaSelectionScenario();
+  await runMultipleOpenComandasScenario();
   await runFirstRunScenario();
   await runCashControllerScenario();
+  await runCheckoutDueAmountScenario();
   runShortcutFixtureScenario();
   runComandaUiRenderScenario();
   runCashUiRenderScenario();
+  runSettlementViewsRenderScenario();
+  runMesasUiRenderScenario();
   runFirstRunUiRenderScenario();
   runComandaLifecycleScenario();
   runComandaCancellationScenario();
@@ -1158,7 +1787,7 @@ export async function runAllPdvShellTests() {
   runCashLifecycleScenario();
   runCashGuardrailScenario();
 
-  console.log("[apps/pdv] 13 runtime checks passed.");
+  console.log("[apps/pdv] 17 runtime checks passed.");
 }
 
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {

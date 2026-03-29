@@ -10,7 +10,9 @@ import {
 import type {
   AuthLoginRequest,
   AuthLogoutRequest,
-  AuthSessionSnapshot
+  AuthSessionSnapshot,
+  OperatorSnapshot,
+  SaveOperatorRequest
 } from "../../contracts/ipc.js";
 import type { MainProcessLogStore } from "../log-store.js";
 
@@ -136,6 +138,80 @@ export class OperatorAuthService {
     });
   }
 
+  listOperators(): OperatorSnapshot[] {
+    return this.#database.operators.listActive().map(mapOperatorSnapshot);
+  }
+
+  saveOperator(request: SaveOperatorRequest): OperatorSnapshot {
+    const nome = request.nome.trim();
+    const operatorCode = request.operatorCode.trim().toUpperCase();
+    const pin = sanitizePinInput(request.pin);
+    const isDeactivation = !request.ativo;
+
+    if (nome.length < 2) {
+      throw new Error("Informe o nome do colaborador com pelo menos 2 caracteres.");
+    }
+
+    if (operatorCode.length < 2) {
+      throw new Error("Informe o codigo do colaborador com pelo menos 2 caracteres.");
+    }
+
+    if (!isDeactivation && pin.length < 4) {
+      throw new Error("O PIN precisa ter pelo menos 4 digitos.");
+    }
+
+    const operatorId = request.operatorId?.trim() || `opr_${operatorCode.toLowerCase()}_${Date.now()}`;
+
+    // For deactivation or edit without PIN change, keep the existing hash
+    const existingRecord = request.operatorId ? this.#database.operators.findById(request.operatorId) : null;
+    const pinHash = pin.length >= 4 ? hashPin(pin) : (existingRecord?.pinHash ?? hashPin("0000"));
+
+    let record;
+    try {
+      record = this.#database.operators.upsert({
+        operator: {
+          operatorId,
+          operatorCode,
+          nome,
+          pinHash,
+          role: request.role,
+          ativo: request.ativo
+        }
+      });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("UNIQUE") && msg.includes("pin_hash")) {
+        throw new Error("Este PIN ja esta em uso por outro colaborador. Escolha um PIN diferente.");
+      }
+      if (msg.includes("UNIQUE") && msg.includes("operator_code")) {
+        throw new Error("Este codigo de colaborador ja existe. Escolha outro codigo.");
+      }
+      throw err;
+    }
+
+    this.#database.auditEvents.append({
+      eventId: `evt_operator_save_${Date.now()}`,
+      entity: "OPERATOR",
+      entityId: operatorId,
+      action: "OPERATOR_SAVED",
+      actorTerminalId: "pdv-main",
+      occurredAt: new Date().toISOString(),
+      payload: {
+        operatorCode,
+        role: request.role,
+        ativo: request.ativo
+      }
+    });
+
+    this.#logger.info("electron.operator.saved", {
+      operatorId,
+      operatorCode,
+      role: request.role
+    });
+
+    return mapOperatorSnapshot(record);
+  }
+
   getSession(terminalId = this.#defaultTerminalId): AuthSessionSnapshot | null {
     const persisted = this.#database.operators.findSessionByTerminalId(terminalId);
 
@@ -151,4 +227,16 @@ export class OperatorAuthService {
       status: "ACTIVE"
     }, persisted.session.loginAt) as OperatorSession;
   }
+}
+
+function mapOperatorSnapshot(record: { operatorId: string; operatorCode: string; nome: string; role: "GERENTE" | "CAIXA" | "GARCOM"; ativo: boolean; createdAt: string; updatedAt: string }): OperatorSnapshot {
+  return {
+    operatorId: record.operatorId,
+    operatorCode: record.operatorCode,
+    nome: record.nome,
+    role: record.role,
+    ativo: record.ativo,
+    createdAt: record.createdAt,
+    updatedAt: record.updatedAt
+  };
 }

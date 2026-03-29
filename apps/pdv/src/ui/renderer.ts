@@ -1,5 +1,14 @@
 import type { PdvShellController } from "../application/index.js";
-import { applyShellTheme, getPreferredFocusSelector, renderShell } from "./view.js";
+import {
+  applyShellTheme,
+  getPreferredFocusSelector,
+  renderAuthRegion,
+  renderCategorias,
+  renderStatusStrip,
+  renderShellScaffold,
+  updatePedidoRegion,
+  updateProdutosRegion
+} from "./view.js";
 
 export interface MountPdvShellOptions {
   container: HTMLElement;
@@ -10,13 +19,28 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
   const { container, controller } = options;
 
   applyShellTheme(document.documentElement);
-
-  let latestFocusSelector = "";
+  const regions = ensureShellRegions(container);
+  let shouldFocusProductList = false;
 
   const unsubscribe = controller.subscribe((state) => {
     const activeFieldSnapshot = captureActiveFieldSnapshot(container);
-    container.innerHTML = renderShell(state);
     const nextFocusSelector = getPreferredFocusSelector(state) ?? "";
+    const workspaceVisible = !state.firstRunWorkspace.status?.firstRunPending && Boolean(state.session);
+
+    regions.status.innerHTML = renderStatusStrip(state);
+    regions.auth.innerHTML = renderAuthRegion(state);
+    regions.auth.hidden = workspaceVisible;
+    regions.workspace.hidden = !workspaceVisible;
+
+    if (workspaceVisible) {
+      regions.categorias.innerHTML = renderCategorias(state);
+      updateProdutosRegion(regions.produtos, state);
+      updatePedidoRegion(regions.pedido, state);
+    } else {
+      regions.categorias.innerHTML = "";
+      regions.produtos.innerHTML = "";
+      regions.pedido.innerHTML = "";
+    }
 
     queueMicrotask(() => {
       if (restoreActiveFieldSnapshot(container, activeFieldSnapshot)) {
@@ -31,9 +55,12 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
           controller.consumeFocus();
         }
       }
-    });
 
-    latestFocusSelector = nextFocusSelector;
+      if (shouldFocusProductList) {
+        focusProductList(container);
+        shouldFocusProductList = false;
+      }
+    });
   });
 
   const onClick = (event: MouseEvent) => {
@@ -48,6 +75,9 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
     switch (action) {
       case "complete-first-run":
         void controller.completeFirstRun();
+        return;
+      case "save-brand-logo":
+        void controller.saveBrandLogoConfiguration();
         return;
       case "pin-digit":
         if (target.dataset["value"]) {
@@ -69,19 +99,41 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
       case "open-comanda":
         void controller.openComandaFromDraft();
         return;
+      case "select-mesa-comanda":
+        if (target.dataset["comandaId"]) {
+          void controller.selectMesaComanda(target.dataset["comandaId"], target.dataset["viewId"] as never | undefined);
+        }
+        return;
       case "select-product":
         if (target.dataset["productId"]) {
           controller.selectCatalogProduct(target.dataset["productId"]);
         }
         return;
       case "add-selected-product":
+        shouldFocusProductList = true;
         void controller.addSelectedProductToCurrentComanda();
+        return;
+      case "select-catalog-category":
+        if (target.dataset["category"]) {
+          controller.selectCatalogCategory(target.dataset["category"]);
+        }
+        return;
+      case "add-product-quick":
+        if (target.dataset["productId"]) {
+          void controller.addProductToCurrentComanda(target.dataset["productId"]);
+        }
         return;
       case "send-production":
         void controller.sendCurrentComandaToProduction();
         return;
       case "generate-preconta":
         void controller.generatePreContaForCurrentComanda();
+        return;
+      case "reopen-comanda":
+        void controller.reopenCurrentComanda();
+        return;
+      case "request-cash-checkout":
+        void controller.requestCurrentComandaCashCheckout();
         return;
       case "select-item":
         if (target.dataset["itemId"]) {
@@ -136,6 +188,36 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
       case "dismiss-feedback":
         controller.clearFeedback();
         return;
+      case "catalog-open-form":
+        controller.openCatalogNewProductForm();
+        return;
+      case "catalog-close-form":
+        controller.closeCatalogNewProductForm();
+        return;
+      case "catalog-save-product":
+        void controller.saveCatalogProduct();
+        return;
+      case "equipe-new-operator":
+        controller.openTeamNewOperatorForm();
+        return;
+      case "equipe-select-operator":
+        if (target.dataset["operatorId"]) {
+          controller.selectTeamOperator(target.dataset["operatorId"]);
+        }
+        return;
+      case "equipe-select-role":
+        if (target.dataset["role"]) {
+          controller.updateTeamRoleDraft(target.dataset["role"] as never);
+        }
+        return;
+      case "equipe-save-operator":
+        void controller.saveTeamOperator();
+        return;
+      case "equipe-deactivate-operator":
+        if (target.dataset["operatorId"]) {
+          void controller.deactivateTeamOperator(target.dataset["operatorId"]);
+        }
+        return;
       default:
         return;
     }
@@ -163,6 +245,11 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
 
     if (event.target.id === "setup-company-document") {
       controller.updateFirstRunCompanyDocument(event.target.value);
+      return;
+    }
+
+    if (event.target.id === "setup-company-logo-file-path" || event.target.id === "brand-logo-file-path") {
+      controller.updateFirstRunCompanyLogoFilePath(event.target.value);
       return;
     }
 
@@ -269,6 +356,39 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
     if (event.target.id.startsWith("cash-count-")) {
       const method = event.target.id.replace("cash-count-", "");
       controller.updateCashClosureCountDraft(method as never, event.target.value);
+      return;
+    }
+
+    const catalogField = event.target.dataset["catalogField"] as "nomeDraft" | "categoriaDraft" | "setorDraft" | "precoDraft" | "shortcutHintDraft" | undefined;
+    if (catalogField) {
+      controller.updateCatalogDraftField(catalogField, event.target.value);
+      return;
+    }
+
+    if (event.target.id === "equipe-operator-nome") {
+      controller.updateTeamDraftField("nomeDraft", event.target.value);
+      return;
+    }
+
+    if (event.target.id === "equipe-operator-code") {
+      controller.updateTeamDraftField("codeDraft", event.target.value);
+      return;
+    }
+
+    if (event.target.id === "equipe-operator-pin") {
+      controller.updateTeamDraftField("pinDraft", event.target.value);
+      return;
+    }
+  };
+
+  const onCatalogFieldChange = (event: Event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLSelectElement)) {
+      return;
+    }
+    const catalogField = target.dataset["catalogField"] as "setorDraft" | undefined;
+    if (catalogField) {
+      controller.updateCatalogDraftField(catalogField, target.value);
     }
   };
 
@@ -280,13 +400,69 @@ export function mountPdvShell(options: MountPdvShellOptions): () => void {
 
   container.addEventListener("click", onClick);
   container.addEventListener("input", onInput);
+  container.addEventListener("change", onCatalogFieldChange);
   document.addEventListener("keydown", onKeydown);
 
   return () => {
     unsubscribe();
     container.removeEventListener("click", onClick);
     container.removeEventListener("input", onInput);
+    container.removeEventListener("change", onCatalogFieldChange);
     document.removeEventListener("keydown", onKeydown);
+  };
+}
+
+function focusProductList(container: HTMLElement): void {
+  const productList = container.querySelector<HTMLElement>("#product-list");
+
+  if (!productList) {
+    return;
+  }
+
+  productList.focus();
+  productList.querySelector<HTMLElement>(".catalog-card[aria-pressed='true']")?.scrollIntoView({
+    block: "nearest"
+  });
+}
+
+interface ShellRegions {
+  status: HTMLElement;
+  auth: HTMLElement;
+  workspace: HTMLElement;
+  categorias: HTMLElement;
+  produtos: HTMLElement;
+  pedido: HTMLElement;
+}
+
+function ensureShellRegions(container: HTMLElement): ShellRegions {
+  let status = container.querySelector<HTMLElement>("#status-region");
+  let auth = container.querySelector<HTMLElement>("#auth-region");
+  let workspace = container.querySelector<HTMLElement>("#workspace-region");
+  let categorias = container.querySelector<HTMLElement>("#categorias");
+  let produtos = container.querySelector<HTMLElement>("#produtos");
+  let pedido = container.querySelector<HTMLElement>("#pedido");
+
+  if (!status || !auth || !workspace || !categorias || !produtos || !pedido) {
+    container.innerHTML = renderShellScaffold();
+    status = container.querySelector<HTMLElement>("#status-region");
+    auth = container.querySelector<HTMLElement>("#auth-region");
+    workspace = container.querySelector<HTMLElement>("#workspace-region");
+    categorias = container.querySelector<HTMLElement>("#categorias");
+    produtos = container.querySelector<HTMLElement>("#produtos");
+    pedido = container.querySelector<HTMLElement>("#pedido");
+  }
+
+  if (!status || !auth || !workspace || !categorias || !produtos || !pedido) {
+    throw new Error("Falha ao montar as regioes fixas do shell do PDV.");
+  }
+
+  return {
+    status,
+    auth,
+    workspace,
+    categorias,
+    produtos,
+    pedido
   };
 }
 

@@ -8,3 +8,6 @@ electron/builders/app-package/
 electron/out/
 delivery/**/*.zip
 delivery/**/docs-pdf/
+.claude/
+electron/*.asar
+SKILL.md

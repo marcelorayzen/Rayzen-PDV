@@ -91,6 +91,7 @@ export interface ComandaAggregate {
   numero: string;
   mesaId: string | null;
   atendimentoRef: string | null;
+  cashCheckoutRequestedAt: string | null;
   status: ComandaStatus;
   openedAt: string;
   currentOwnerUserId: string | null;
@@ -167,6 +168,12 @@ export interface GeneratePreContaInput {
   auditEventId: string;
 }
 
+export interface RequestComandaCashCheckoutInput {
+  actor: ComandaActor;
+  occurredAt: string;
+  auditEventId: string;
+}
+
 export interface CheckoutPaymentInput {
   paymentId: string;
   method: ComandaPaymentMethod;
@@ -182,6 +189,12 @@ export interface CheckoutComandaInput {
 
 export interface CancelComandaInput {
   reason: string;
+  actor: ComandaActor;
+  occurredAt: string;
+  auditEventId: string;
+}
+
+export interface ReopenComandaInput {
   actor: ComandaActor;
   occurredAt: string;
   auditEventId: string;

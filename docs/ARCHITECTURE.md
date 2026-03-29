@@ -46,6 +46,11 @@ Separacao interna atual:
 Integracao atual:
 
 - o shell de `comanda` e `caixa` ja consome IPC real para abrir comanda, lancar item, cancelar item, enviar producao, iniciar checkout, confirmar pagamento, abrir caixa, registrar movimento essencial, fechar caixa e exportar auditoria
+- o snapshot operacional de comanda continua expondo `currentComanda`, mas agora tambem carrega `activeComandas` e agrupamentos por mesa (`mesaGroups`) para suportar o mapa de mesas real
+- o renderer usa `F3` para listar mesas agrupadas e pode recarregar o workspace detalhado da comanda selecionada via `getComandaWorkspace(comandaId)`
+- o renderer monta o shell uma vez e atualiza regioes persistentes (`categorias`, `produtos`, `pedido`) sem recriar a arvore inteira do layout
+- dentro de `product-list` e `pedido-list`, a atualizacao passou a usar reconciliacao incremental por chave, preservando os nós existentes, o foco local e os elementos estaticos do painel
+- a view `comandas` foi reorganizada visualmente para priorizar area util de lancamento e itens; a lateral passou a concentrar marca do terminal, KPIs e cancelamento sem alterar a logica do controller
 - o processo principal tambem expone `cash.status` e `cash.resumo` como leitura explicita do caixa persistido do terminal
 - o processo principal expone `fiscal.getDocumentStatus`, `fiscal.listPending`, `fiscal.reprocess` e `fiscal.queryStatusByAccessKey` para a trilha fiscal operacional
 - o `main process` executa as regras de dominio, persiste no SQLite e devolve snapshots operacionais para o renderer
@@ -60,6 +65,7 @@ O processo principal atual entrega:
 - bridge `window.rayzenDesktop` como caminho padrao entre renderer e main process
 - resolucao de paths operacionais em `%ProgramData%\\RayzenPDV\\`
 - configuracao operacional persistida em `%ProgramData%\\RayzenPDV\\config\\runtime-config.json`
+- a configuracao operacional agora tambem pode guardar o caminho local do logo da empresa para a marca renderizada no shell
 - logs locais exportaveis com redaction de chaves sensiveis e padroes comuns de PII
 - suporte operacional para backup e restore controlados, com listagem local de pacotes, manifesto e validacao de integridade do SQLite
 - wizard de first-run guiado pelo renderer, validado no processo principal e persistido fora dos segredos fiscais
@@ -105,6 +111,7 @@ O pacote de UI ainda e pequeno, mas ja cumpre o papel de concentrar utilitarios 
 ### Comanda
 
 1. abrir comanda
+2. opcionalmente vincular a comanda a uma mesa compartilhada com outras comandas do mesmo atendimento
 2. lancar itens
 3. cancelar item ou comanda com motivo quando permitido
 4. enviar para producao
@@ -176,6 +183,7 @@ O baseline de release para Windows usa Electron Forge:
 
 ## Pontos abertos reais
 
+- revisar se a selecao principal do renderer continua em `currentComanda` ou se deve virar `selectedComandaId` explicito
 - ampliar o roundtrip persistido para configuracoes locais que ainda nao estao modeladas em banco, como preferencias operacionais e parametrizacao de terminal
 - homologar matriz de impressoras termicas por modelo
 - homologar em campo a trilha fiscal com `NS_TECNOLOGIA`

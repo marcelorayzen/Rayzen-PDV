@@ -11,6 +11,7 @@ import { ensureMainProcessPaths, resolveMainProcessPaths, type MainProcessPaths 
 import { PrintSpoolService, type PrintSpoolServiceOptions } from "./printing/service.js";
 import { FirstRunSetupService } from "./setup/service.js";
 import { OperationalSupportService } from "./support/service.js";
+import { WaiterHttpServer } from "./waiter/http-server.js";
 import {
   createRayzenMainWindow,
   getOpenWindowCount
@@ -45,6 +46,7 @@ export interface ElectronMainContext {
   printing: PrintSpoolService;
   setup: FirstRunSetupService;
   support: OperationalSupportService;
+  waiter: WaiterHttpServer;
   mainWindow: RayzenBrowserWindowLike;
   dispose(): void;
 }
@@ -98,6 +100,9 @@ export async function createElectronMainContext(
     setup
   });
 
+  const waiter = new WaiterHttpServer(auth, catalog, pdv, logger);
+  waiter.start();
+
   const registeredHandlers = registerMainIpcHandlers(electronIpcMain, {
     appVersion: electronApp.getVersion(),
     environment: resolveEnvironment(electronApp.isPackaged),
@@ -110,7 +115,8 @@ export async function createElectronMainContext(
     fiscal,
     print: printing,
     setup,
-    support
+    support,
+    waiter
   });
   const mainWindow = createRayzenMainWindow(options.window);
 
@@ -123,6 +129,7 @@ export async function createElectronMainContext(
   electronApp.on("before-quit", () => {
     logger.info("electron.main.before-quit");
     registeredHandlers.dispose();
+    waiter.stop();
     fiscal.stop();
     printing.stop();
     database.close();
@@ -144,8 +151,10 @@ export async function createElectronMainContext(
     printing,
     setup,
     support,
+    waiter,
     mainWindow: mainWindow.window,
     dispose() {
+      waiter.stop();
       disposeMainContext(registeredHandlers, database, printing, fiscal);
     }
   };

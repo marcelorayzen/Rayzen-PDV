@@ -1,0 +1,73 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-and-release:
+    name: Build & Publish Windows Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: "10"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build
+        run: pnpm build
+
+      - name: Stage renderer
+        run: pnpm --filter @rayzen/electron stage:renderer
+
+      - name: Stage app package
+        run: pnpm --filter @rayzen/electron stage:app
+
+      - name: Make ZIP
+        run: pnpm exec electron-forge make electron/builders/app-package --platform win32 --targets @electron-forge/maker-zip
+
+      - name: Make Installer
+        run: pnpm exec electron-forge make electron/builders/app-package --platform win32 --targets @electron-forge/maker-squirrel
+
+      - name: Extract version from tag
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF_NAME#v}" >> $GITHUB_OUTPUT
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "Rayzen PDV v${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## Rayzen PDV v${{ steps.version.outputs.VERSION }}
+
+            ### Instalação
+            - **Instalador (recomendado):** baixe `RayzenPDV-${{ steps.version.outputs.VERSION }}-Setup.exe`, dê duplo clique e instale.
+            - **Portátil:** baixe o `.zip`, descompacte e abra `RayzenPDV.exe`.
+
+            > Se aparecer aviso do Windows Defender: clique em **Mais informações → Executar assim mesmo**.
+
+            ### Módulo Garçom (novo)
+            O app embute um servidor HTTP na porta 3030. Veja o endereço na barra de status após abrir o app.
+            O garçom acessa pelo navegador do celular na mesma rede Wi-Fi.
+          draft: false
+          prerelease: false
+          files: |
+            electron/out/make/squirrel.windows/x64/*.exe
+            electron/out/make/squirrel.windows/x64/*.nupkg
+            electron/out/make/zip/win32/x64/*.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

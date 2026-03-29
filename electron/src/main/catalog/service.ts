@@ -1,5 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import type { RayzenDatabaseClient } from "@rayzen/db";
 import type { CatalogProduct } from "@rayzen/pdv";
+
+import type { CatalogUpsertProductRequest } from "../../contracts/ipc.js";
 
 export class CatalogService {
   readonly #database: RayzenDatabaseClient;
@@ -17,6 +21,29 @@ export class CatalogService {
       shortcutHint: product.shortcutHint,
       category: product.categoria
     }));
+  }
+
+  upsertProduct(request: CatalogUpsertProductRequest): CatalogProduct {
+    const productId = request.productId?.trim() || randomUUID();
+    const record = this.#database.products.upsert({
+      product: {
+        productId,
+        nome: request.nome.trim(),
+        precoCents: request.precoCents,
+        categoria: request.categoria.trim(),
+        setor: request.setor.trim(),
+        shortcutHint: request.shortcutHint.trim(),
+        ativo: true
+      }
+    });
+    return {
+      productId: record.productId,
+      label: record.nome,
+      setor: record.setor,
+      unitPriceCents: record.precoCents,
+      shortcutHint: record.shortcutHint,
+      category: record.categoria
+    };
   }
 
   findProduct(productId: string): CatalogProduct | null {

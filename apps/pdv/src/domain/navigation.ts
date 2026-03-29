@@ -15,13 +15,15 @@ export type ShortcutKey = keyof typeof SHELL_SHORTCUTS;
 export type FocusTarget =
   | "setup-company-legal-name"
   | "pin-input"
+  | "mesas-primary-action"
   | "product-search"
   | "comanda-numero"
   | "cancel-reason"
   | "checkout-amount"
   | "cash-opening-fund"
   | "cash-receipt-amount"
-  | "cash-divergence-reason";
+  | "cash-divergence-reason"
+  | "equipe-operator-nome";
 
 interface NavigationSeed {
   id: string;
@@ -47,7 +49,7 @@ export const MAIN_NAVIGATION = [
     shortcut: "F3",
     description: "Mapa operacional para sala e acompanhamento do turno.",
     roles: ["GARCOM", "GERENTE"],
-    focusTarget: null
+    focusTarget: "mesas-primary-action"
   },
   {
     id: "catalogo",
@@ -88,6 +90,14 @@ export const MAIN_NAVIGATION = [
     description: "Abertura, fechamento e conferencias ficam neste hub.",
     roles: ["CAIXA", "GERENTE"],
     focusTarget: "cash-opening-fund"
+  },
+  {
+    id: "equipe",
+    label: "Equipe",
+    shortcut: null,
+    description: "Cadastro e gestao de colaboradores do terminal.",
+    roles: ["GERENTE"],
+    focusTarget: "equipe-operator-nome"
   }
 ] as const satisfies readonly NavigationSeed[];
 

@@ -15,6 +15,7 @@ import type {
 import type { AuthenticationFailure, OperatorSession } from "./auth.js";
 import { getDefaultViewForRole, type FocusTarget, type MainViewId } from "./navigation.js";
 import type {
+  ComandaMesaGroupSnapshot,
   InstallationStatusSnapshot,
   PrintDriverPrinterSnapshot
 } from "../infra/desktop-api.js";
@@ -44,10 +45,13 @@ export interface RuntimeSnapshot {
 }
 
 export interface ComandaWorkspaceState {
-  currentComanda: ComandaAggregate | null;
+  selectedComandaId: string | null;
+  activeComandas: ComandaAggregate[];
+  mesaGroups: ComandaMesaGroupSnapshot[];
   auditTrail: ComandaAuditEvent[];
   catalogProducts: CatalogProduct[];
   selectedCatalogProductId: string | null;
+  selectedCatalogCategory: string | null;
   selectedItemId: string | null;
   comandaNumeroDraft: string;
   mesaDraft: string;
@@ -83,6 +87,7 @@ export interface FirstRunWorkspaceState {
   companyLegalNameDraft: string;
   companyTradeNameDraft: string;
   companyDocumentDraft: string;
+  companyLogoFilePathDraft: string;
   cozinhaPrinterDraft: string;
   barPrinterDraft: string;
   caixaPrinterDraft: string;
@@ -103,9 +108,42 @@ export interface ShellState {
   feedbackTone: "info" | "error";
   productSearch: string;
   lastShortcut: string | null;
+  waiterUrl: string | null;
   firstRunWorkspace: FirstRunWorkspaceState;
   comandaWorkspace: ComandaWorkspaceState;
   cashWorkspace: CashWorkspaceState;
+  catalogDraft: CatalogDraftState;
+  teamWorkspace: TeamWorkspaceState;
+}
+
+export interface CatalogDraftState {
+  mode: "list" | "new";
+  nomeDraft: string;
+  categoriaDraft: string;
+  setorDraft: string;
+  precoDraft: string;
+  shortcutHintDraft: string;
+}
+
+export interface OperatorRecord {
+  operatorId: string;
+  operatorCode: string;
+  nome: string;
+  role: "GERENTE" | "CAIXA" | "GARCOM";
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TeamWorkspaceState {
+  operators: OperatorRecord[];
+  selectedOperatorId: string | null;
+  nomeDraft: string;
+  codeDraft: string;
+  pinDraft: string;
+  roleDraft: "GERENTE" | "CAIXA" | "GARCOM";
+  submitting: boolean;
+  formMode: "new" | "edit";
 }
 
 export type ShellEvent =
@@ -139,7 +177,10 @@ export type ShellEvent =
   | { type: "feedback-updated"; message: string | null; tone: "info" | "error" }
   | { type: "focus-requested"; focusTarget: FocusTarget | null }
   | { type: "feedback-cleared" }
-  | { type: "focus-consumed" };
+  | { type: "focus-consumed" }
+  | { type: "catalog-draft-updated"; draft: CatalogDraftState }
+  | { type: "team-workspace-updated"; workspace: TeamWorkspaceState }
+  | { type: "waiter-status-loaded"; url: string | null };
 
 export function createInitialShellState(): ShellState {
   return {
@@ -171,22 +212,27 @@ export function createInitialShellState(): ShellState {
     feedbackTone: "info",
     productSearch: "",
     lastShortcut: null,
+    waiterUrl: null,
     firstRunWorkspace: {
       status: null,
       availablePrinters: [],
       companyLegalNameDraft: "",
       companyTradeNameDraft: "",
       companyDocumentDraft: "",
+      companyLogoFilePathDraft: "",
       cozinhaPrinterDraft: "IMP_COZINHA_01",
       barPrinterDraft: "IMP_BAR_01",
       caixaPrinterDraft: "IMP_CAIXA_01",
       submitting: false
     },
     comandaWorkspace: {
-      currentComanda: null,
+      selectedComandaId: null,
+      activeComandas: [],
+      mesaGroups: [],
       auditTrail: [],
       catalogProducts: [],
       selectedCatalogProductId: null,
+      selectedCatalogCategory: null,
       selectedItemId: null,
       comandaNumeroDraft: "101",
       mesaDraft: "M12",
@@ -219,6 +265,24 @@ export function createInitialShellState(): ShellState {
       },
       closureNoteDraft: "",
       divergenceReasonDraft: ""
+    },
+    catalogDraft: {
+      mode: "list",
+      nomeDraft: "",
+      categoriaDraft: "",
+      setorDraft: "BAR",
+      precoDraft: "",
+      shortcutHintDraft: ""
+    },
+    teamWorkspace: {
+      operators: [],
+      selectedOperatorId: null,
+      nomeDraft: "",
+      codeDraft: "",
+      pinDraft: "",
+      roleDraft: "GARCOM",
+      submitting: false,
+      formMode: "new"
     }
   };
 }
@@ -242,6 +306,7 @@ export function reduceShellState(state: ShellState, event: ShellEvent): ShellSta
           companyLegalNameDraft: event.status.company?.legalName ?? "",
           companyTradeNameDraft: event.status.company?.tradeName ?? "",
           companyDocumentDraft: event.status.company?.document ?? "",
+          companyLogoFilePathDraft: event.status.company?.logoFilePath ?? "",
           cozinhaPrinterDraft: event.status.printRoutes.find((route) => route.setor === "COZINHA")?.impressoras[0] ?? "IMP_COZINHA_01",
           barPrinterDraft: event.status.printRoutes.find((route) => route.setor === "BAR")?.impressoras[0] ?? "IMP_BAR_01",
           caixaPrinterDraft: event.status.printRoutes.find((route) => route.setor === "CAIXA")?.impressoras[0] ?? "IMP_CAIXA_01",
@@ -373,6 +438,21 @@ export function reduceShellState(state: ShellState, event: ShellEvent): ShellSta
       return {
         ...state,
         focusTarget: null
+      };
+    case "catalog-draft-updated":
+      return {
+        ...state,
+        catalogDraft: event.draft
+      };
+    case "team-workspace-updated":
+      return {
+        ...state,
+        teamWorkspace: event.workspace
+      };
+    case "waiter-status-loaded":
+      return {
+        ...state,
+        waiterUrl: event.url
       };
   }
 }

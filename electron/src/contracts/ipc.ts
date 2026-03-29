@@ -36,12 +36,14 @@ export const IPC_CHANNELS = {
   backupRestore: "rayzen/backup/restore",
   setupGetStatus: "rayzen/setup/get-status",
   setupCompleteFirstRun: "rayzen/setup/complete-first-run",
+  setupUpdateBrandLogo: "rayzen/setup/update-brand-logo",
   dbGetStatus: "rayzen/db/get-status",
   authLogin: "rayzen/auth/login",
   authLogout: "rayzen/auth/logout",
   authGetSession: "rayzen/auth/get-session",
   catalogListProducts: "rayzen/catalog/list-products",
   catalogGetProduct: "rayzen/catalog/get-product",
+  catalogUpsertProduct: "rayzen/catalog/upsert-product",
   fiscalGetStatus: "rayzen/fiscal/get-status",
   fiscalGetDocumentStatus: "rayzen/fiscal/get-document-status",
   fiscalListPending: "rayzen/fiscal/list-pending",
@@ -58,11 +60,14 @@ export const IPC_CHANNELS = {
   printReprocessJob: "rayzen/print/reprocess-job",
   printReprintSecondCopy: "rayzen/print/reprint-second-copy",
   pdvGetOperationalSnapshot: "rayzen/pdv/get-operational-snapshot",
+  comandaGetWorkspace: "rayzen/comanda/get-workspace",
   comandaOpen: "rayzen/comanda/open",
   comandaAddItem: "rayzen/comanda/add-item",
   comandaCancelItem: "rayzen/comanda/cancel-item",
   comandaSendToProduction: "rayzen/comanda/send-to-production",
   comandaStartCheckout: "rayzen/comanda/start-checkout",
+  comandaReopenComanda: "rayzen/comanda/reopen",
+  comandaRequestCashCheckout: "rayzen/comanda/request-cash-checkout",
   comandaConfirmPayment: "rayzen/comanda/confirm-payment",
   cashOpenSession: "rayzen/cash/open-session",
   cashGetStatus: "rayzen/cash/get-status",
@@ -72,7 +77,10 @@ export const IPC_CHANNELS = {
   cashRegisterWithdrawal: "rayzen/cash/register-withdrawal",
   cashStartClosure: "rayzen/cash/start-closure",
   cashCloseSession: "rayzen/cash/close-session",
-  cashExportAudit: "rayzen/cash/export-audit"
+  cashExportAudit: "rayzen/cash/export-audit",
+  operatorList: "rayzen/operator/list",
+  operatorSave: "rayzen/operator/save",
+  waiterGetStatus: "rayzen/waiter/get-status"
 } as const;
 
 export interface MainBootstrapSnapshot {
@@ -173,6 +181,7 @@ export interface InstallationStatusSnapshot {
     legalName: string;
     tradeName: string | null;
     document: string | null;
+    logoFilePath?: string | null;
   } | null;
   printRoutes: PrintRouteSnapshot[];
   seedState: {
@@ -186,11 +195,17 @@ export interface CompleteFirstRunRequest {
   companyLegalName: string;
   companyTradeName?: string | null;
   companyDocument?: string | null;
+  companyLogoFilePath?: string | null;
   printers: {
     cozinha: string;
     bar: string;
     caixa: string;
   };
+  occurredAt: string;
+}
+
+export interface UpdateBrandLogoRequest {
+  companyLogoFilePath?: string | null;
   occurredAt: string;
 }
 
@@ -211,10 +226,36 @@ export interface CatalogGetProductRequest {
   productId: string;
 }
 
+export interface CatalogUpsertProductRequest {
+  nome: string;
+  categoria: string;
+  setor: string;
+  precoCents: number;
+  shortcutHint: string;
+  productId?: string | null;
+}
+
+export interface GetComandaWorkspaceRequest {
+  comandaId: string;
+}
+
 export interface ComandaWorkspaceSnapshot {
   currentComanda: ComandaAggregate | null;
+  activeComandas: ComandaAggregate[];
+  mesaGroups: ComandaMesaGroupSnapshot[];
   auditTrail: ComandaAuditEvent[];
   lastPreContaSnapshot: PreContaSnapshot | null;
+}
+
+export interface ComandaMesaGroupSnapshot {
+  mesaId: string | null;
+  comandas: ComandaAggregate[];
+  comandaCount: number;
+  itemCount: number;
+  totalAmountCents: number;
+  paidAmountCents: number;
+  dueAmountCents: number;
+  statuses: ComandaAggregate["status"][];
 }
 
 export interface CashWorkspaceSnapshot {
@@ -261,6 +302,16 @@ export interface SendComandaToProductionRequest {
 }
 
 export interface StartComandaCheckoutRequest {
+  comandaId: string;
+  actor: ComandaActor;
+}
+
+export interface ReopenComandaRequest {
+  comandaId: string;
+  actor: ComandaActor;
+}
+
+export interface RequestComandaCashCheckoutRequest {
   comandaId: string;
   actor: ComandaActor;
 }
@@ -567,4 +618,30 @@ export interface ReprintSecondCopyRequest {
   requestedAt: string;
   actor: PrintRequestActor;
   reason: string;
+}
+
+export interface OperatorSnapshot {
+  operatorId: string;
+  operatorCode: string;
+  nome: string;
+  role: "GERENTE" | "CAIXA" | "GARCOM";
+  ativo: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SaveOperatorRequest {
+  operatorId?: string | null;
+  operatorCode: string;
+  nome: string;
+  pin: string;
+  role: "GERENTE" | "CAIXA" | "GARCOM";
+  ativo: boolean;
+}
+
+export interface WaiterServerStatusSnapshot {
+  running: boolean;
+  port: number;
+  localIp: string | null;
+  url: string | null;
 }

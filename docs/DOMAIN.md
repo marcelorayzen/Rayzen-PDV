@@ -70,6 +70,15 @@ Campos relevantes no aggregate e na persistencia:
 - `cancellationReason?`
 - `currentOwnerUserId?`
 
+Observacao operacional atual:
+
+- `mesaId` e um agrupador operacional
+- uma mesma mesa pode concentrar varias comandas simultaneas
+- o snapshot do shell ainda manteve `currentComanda` por compatibilidade, mas passa a ser ampliado para listar as comandas ativas e os agrupamentos por mesa
+- a comanda pode ser `encaminhada ao caixa` por evento operacional explicito depois da pre-conta
+- a fila principal do caixa deve considerar apenas comandas `EM_PAGAMENTO` ja encaminhadas ao caixa
+- o caixa continua podendo consultar manualmente outras comandas ativas fora da fila principal
+
 Status canonicos:
 
 - `ABERTA`
@@ -245,6 +254,7 @@ Modos de emissao atuais:
 - pre-conta gera snapshot auditavel do total
 - checkout encerra a comanda apenas com total valido
 - troco acima do total so e permitido quando houver pagamento em `DINHEIRO` suficiente
+- o agrupamento por mesa nao muda a autonomia de cada comanda: cada comanda mantem seus itens, pagamentos, eventos e encerramento proprios
 
 ### Caixa
 
@@ -318,6 +328,7 @@ Exemplos:
 - checkout encerra comanda e atualiza valores de pagamento
 - checkout confirmado pode enfileirar a NFC-e vinculada a `COMANDA` quando houver emitente fiscal habilitado e segredos locais disponiveis
 - o baseline atual ja fecha o roundtrip de abertura, lancamento, cancelamento de item, envio para producao, pre-conta e confirmacao de pagamento via IPC e persistencia local
+- quando varias comandas compartilham a mesma mesa, a mesa funciona apenas como contexto operacional; pre-conta, checkout e auditoria continuam ocorrendo por comanda
 
 ### Fluxo de caixa
 

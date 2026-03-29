@@ -6,7 +6,9 @@ import type {
   AuthLogoutRequest,
   CancelComandaItemRequest,
   CatalogGetProductRequest,
+  CatalogUpsertProductRequest,
   CompleteFirstRunRequest,
+  UpdateBrandLogoRequest,
   CashWorkspaceSnapshot,
   CashStatusSnapshot,
   CashSummarySnapshot,
@@ -16,6 +18,7 @@ import type {
   FiscalDocumentSnapshot,
   FiscalQueueJobSnapshot,
   FiscalStatusSnapshot,
+  GetComandaWorkspaceRequest,
   GetFiscalDocumentStatusRequest,
   ListPendingFiscalQueueRequest,
   ListPrintJobsRequest,
@@ -23,30 +26,37 @@ import type {
   OpenCashSessionRequest,
   OpenComandaRequest,
   OperationalSnapshot,
+  OperatorSnapshot,
   ProcessFiscalQueueRequest,
   ProcessFiscalQueueResult,
   PrintDriverPrinterSnapshot,
   PrintSpoolJobSnapshot,
   PrintSpoolStatusSnapshot,
   QueryFiscalStatusByAccessKeyRequest,
+  ReopenComandaRequest,
+  RequestComandaCashCheckoutRequest,
   RegisterCashMovementRequest,
   RegisterCashSupplyRequest,
   RegisterCashWithdrawalRequest,
   ReprocessPrintJobRequest,
+  SaveOperatorRequest,
   SendComandaToProductionRequest,
   StartCashClosureRequest,
-  StartComandaCheckoutRequest
+  StartComandaCheckoutRequest,
+  WaiterServerStatusSnapshot
 } from "../infra/desktop-api.js";
 
 export interface DesktopBridge {
   getRuntimeSnapshot(): Promise<RuntimeSnapshot>;
   getInstallationStatus(): Promise<InstallationStatusSnapshot>;
   completeFirstRun(request: CompleteFirstRunRequest): Promise<InstallationStatusSnapshot>;
+  updateBrandLogo(request: UpdateBrandLogoRequest): Promise<InstallationStatusSnapshot>;
   login(request: AuthLoginRequest): Promise<AuthenticationResult>;
   logout(request?: AuthLogoutRequest): Promise<void>;
   getOperatorSession(): Promise<OperatorSession | null>;
   listCatalogProducts(): Promise<CatalogProduct[]>;
   getCatalogProduct(request: CatalogGetProductRequest): Promise<CatalogProduct | null>;
+  upsertCatalogProduct(request: CatalogUpsertProductRequest): Promise<CatalogProduct>;
   getFiscalStatus(): Promise<FiscalStatusSnapshot>;
   getFiscalDocumentStatus(request: GetFiscalDocumentStatusRequest): Promise<FiscalDocumentSnapshot | null>;
   listPendingFiscalQueue(request?: ListPendingFiscalQueueRequest): Promise<FiscalQueueJobSnapshot[]>;
@@ -57,11 +67,14 @@ export interface DesktopBridge {
   listPrintJobs(request?: ListPrintJobsRequest): Promise<PrintSpoolJobSnapshot[]>;
   reprocessPrintJob(request: ReprocessPrintJobRequest): Promise<PrintSpoolJobSnapshot>;
   getOperationalSnapshot(): Promise<OperationalSnapshot>;
+  getComandaWorkspace(request: GetComandaWorkspaceRequest): Promise<ComandaWorkspaceSnapshot>;
   openComanda(request: OpenComandaRequest): Promise<ComandaWorkspaceSnapshot>;
   addComandaItem(request: AddComandaItemRequest): Promise<ComandaWorkspaceSnapshot>;
   cancelComandaItem(request: CancelComandaItemRequest): Promise<ComandaWorkspaceSnapshot>;
   sendComandaToProduction(request: SendComandaToProductionRequest): Promise<ComandaWorkspaceSnapshot>;
   startComandaCheckout(request: StartComandaCheckoutRequest): Promise<ComandaWorkspaceSnapshot>;
+  reopenComanda(request: ReopenComandaRequest): Promise<ComandaWorkspaceSnapshot>;
+  requestComandaCashCheckout(request: RequestComandaCashCheckoutRequest): Promise<ComandaWorkspaceSnapshot>;
   confirmComandaPayment(request: ConfirmComandaPaymentRequest): Promise<OperationalSnapshot>;
   openCashSession(request: OpenCashSessionRequest): Promise<CashWorkspaceSnapshot>;
   registerCashReceipt(request: RegisterCashMovementRequest): Promise<CashWorkspaceSnapshot>;
@@ -72,4 +85,7 @@ export interface DesktopBridge {
   exportCashAudit(): Promise<CashWorkspaceSnapshot>;
   getCashStatus(): Promise<CashStatusSnapshot>;
   getCashSummary(): Promise<CashSummarySnapshot>;
+  listOperators(): Promise<OperatorSnapshot[]>;
+  saveOperator(request: SaveOperatorRequest): Promise<OperatorSnapshot>;
+  getWaiterStatus(): Promise<WaiterServerStatusSnapshot | null>;
 }
