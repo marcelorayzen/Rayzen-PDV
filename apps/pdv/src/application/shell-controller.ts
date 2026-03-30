@@ -1207,16 +1207,17 @@ export class PdvShellController {
       });
 
       const operators = await this.#desktopBridge.listOperators();
+      const wasNew = workspace.formMode === "new";
 
       this.#syncTeamWorkspace({
         ...this.#state.teamWorkspace,
         operators,
-        selectedOperatorId: saved.operatorId,
-        nomeDraft: saved.nome,
-        codeDraft: saved.operatorCode,
+        selectedOperatorId: wasNew ? null : saved.operatorId,
+        nomeDraft: wasNew ? "" : saved.nome,
+        codeDraft: wasNew ? "" : saved.operatorCode,
         pinDraft: "",
-        roleDraft: saved.role,
-        formMode: "edit",
+        roleDraft: wasNew ? "GARCOM" : saved.role,
+        formMode: wasNew ? "new" : "edit",
         submitting: false
       });
       this.#setFeedback(`Colaborador ${saved.nome} salvo com sucesso.`, "info");
