@@ -30,6 +30,7 @@ export interface PathResolutionOptions {
 export function resolveMainProcessPaths(options: PathResolutionOptions = {}): MainProcessPaths {
   const programDataRoot =
     options.programDataRoot ??
+    process.env["APPDATA"] ??
     process.env["ProgramData"] ??
     path.resolve(process.cwd(), ".rayzen-pdv");
 
